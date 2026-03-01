@@ -1,7 +1,1 @@
-{
-  "/page": "app/page.js",
-  "/reports/page": "app/reports/page.js",
-  "/settings/page": "app/settings/page.js",
-  "/login/page": "app/login/page.js",
-  "/list/[id]/page": "app/list/[id]/page.js"
-}
+{}
