@@ -1,0 +1,87 @@
+
+> new@1.0.0 build
+> next build
+
+  ▲ Next.js 15.0.0
+
+   Creating an optimized production build ...
+Failed to compile.
+
+./app/globals.css.webpack[javascript/auto]!=!./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[13].oneOf[10].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[13].oneOf[10].use[3]!./app/globals.css
+Error: It looks like you're trying to use `tailwindcss` directly as a PostCSS plugin. The PostCSS plugin has moved to a separate package, so to continue using Tailwind CSS with PostCSS you'll need to install `@tailwindcss/postcss` and update your PostCSS configuration.
+    at at (C:\Users\O_O\new\node_modules\tailwindcss\dist\lib.js:38:1643)
+    at LazyResult.runOnRoot (C:\Users\O_O\new\node_modules\next\node_modules\postcss\lib\lazy-result.js:329:16)
+    at LazyResult.runAsync (C:\Users\O_O\new\node_modules\next\node_modules\postcss\lib\lazy-result.js:258:26)
+    at LazyResult.async (C:\Users\O_O\new\node_modules\next\node_modules\postcss\lib\lazy-result.js:160:30)
+    at LazyResult.then (C:\Users\O_O\new\node_modules\next\node_modules\postcss\lib\lazy-result.js:404:17)
+
+Import trace for requested module:
+./app/globals.css.webpack[javascript/auto]!=!./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[13].oneOf[10].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[13].oneOf[10].use[3]!./app/globals.css
+./app/globals.css
+
+./app/globals.css
+Error: Cannot find module 'autoprefixer'
+Require stack:
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\plugins.js
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\index.js
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\index.js
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack-config.js
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack-build\impl.js
+- C:\Users\O_O\new\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1448:15)
+    at C:\Users\O_O\new\node_modules\next\dist\server\require-hook.js:55:36
+    at require.resolve (node:internal/modules/helpers:163:19)
+    at loadPlugin (C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\plugins.js:49:32)
+    at C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\plugins.js:157:56
+    at Array.map (<anonymous>)
+    at getPostCssPlugins (C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\plugins.js:157:47)
+    at async C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\index.js:124:36
+    at async C:\Users\O_O\new\node_modules\next\dist\build\webpack\loaders\postcss-loader\src\index.js:51:40
+    at async Span.traceAsyncFn (C:\Users\O_O\new\node_modules\next\dist\trace\trace.js:157:20)
+    at tryRunOrWebpackError (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:313010)
+    at __webpack_require_module__ (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:131165)
+    at __nested_webpack_require_153728__ (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:130607)
+    at C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:131454
+    at symbolIterator (C:\Users\O_O\new\node_modules\next\dist\compiled\neo-async\async.js:1:14444)
+    at done (C:\Users\O_O\new\node_modules\next\dist\compiled\neo-async\async.js:1:14824)
+    at Hook.eval [as callAsync] (eval at create (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:13:28858), <anonymous>:15:1)
+    at Hook.CALL_ASYNC_DELEGATE [as _callAsync] (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:13:26012)
+    at C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:130328
+    at symbolIterator (C:\Users\O_O\new\node_modules\next\dist\compiled\neo-async\async.js:1:14402)
+-- inner error --
+Error: Cannot find module 'autoprefixer'
+Require stack:
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\plugins.js
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\index.js
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\index.js
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack-config.js
+- C:\Users\O_O\new\node_modules\next\dist\build\webpack-build\impl.js
+- C:\Users\O_O\new\node_modules\next\dist\compiled\jest-worker\processChild.js
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1448:15)
+    at C:\Users\O_O\new\node_modules\next\dist\server\require-hook.js:55:36
+    at require.resolve (node:internal/modules/helpers:163:19)
+    at loadPlugin (C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\plugins.js:49:32)
+    at C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\plugins.js:157:56
+    at Array.map (<anonymous>)
+    at getPostCssPlugins (C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\plugins.js:157:47)
+    at async C:\Users\O_O\new\node_modules\next\dist\build\webpack\config\blocks\css\index.js:124:36
+    at async C:\Users\O_O\new\node_modules\next\dist\build\webpack\loaders\postcss-loader\src\index.js:51:40
+    at async Span.traceAsyncFn (C:\Users\O_O\new\node_modules\next\dist\trace\trace.js:157:20)
+    at Object.<anonymous> (C:\Users\O_O\new\node_modules\next\dist\build\webpack\loaders\css-loader\src\index.js??ruleSet[1].rules[13].oneOf[10].use[2]!C:\Users\O_O\new\node_modules\next\dist\build\webpack\loaders\postcss-loader\src\index.js??ruleSet[1].rules[13].oneOf[10].use[3]!C:\Users\O_O\new\app\globals.css:1:7)
+    at C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:922602
+    at Hook.eval [as call] (eval at create (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:13:28636), <anonymous>:7:1)
+    at Hook.CALL_DELEGATE [as _call] (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:13:25906)
+    at C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:131198
+    at tryRunOrWebpackError (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:312964)
+    at __webpack_require_module__ (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:131165)
+    at __nested_webpack_require_153728__ (C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:130607)
+    at C:\Users\O_O\new\node_modules\next\dist\compiled\webpack\bundle5.js:28:131454
+    at symbolIterator (C:\Users\O_O\new\node_modules\next\dist\compiled\neo-async\async.js:1:14444)
+
+Generated code for C:\Users\O_O\new\node_modules\next\dist\build\webpack\loaders\css-loader\src\index.js??ruleSet[1].rules[13].oneOf[10].use[2]!C:\Users\O_O\new\node_modules\next\dist\build\webpack\loaders\postcss-loader\src\index.js??ruleSet[1].rules[13].oneOf[10].use[3]!C:\Users\O_O\new\app\globals.css
+
+Import trace for requested module:
+./app/globals.css
+
+
+> Build failed because of webpack errors
