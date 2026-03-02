@@ -233,8 +233,13 @@ export default function MainPage() {
                             </tr>
                         ) : (
                             filteredStudents.map((student: Student) => (
-                                <tr key={student.id} className="hover:bg-muted/30 transition-colors group bg-white">
-                                    <td className="p-4 font-semibold text-foreground">{student.name}</td>
+                                <tr key={student.id} className="hover:bg-blue-50/50 transition-all duration-200 group/row bg-white relative">
+                                    <td className="p-4 relative">
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover/row:scale-y-100 transition-transform origin-top duration-300"></div>
+                                        <div className="font-bold text-foreground group-hover/row:text-primary transition-colors duration-200">
+                                            {student.name}
+                                        </div>
+                                    </td>
                                     {editingId === student.id ? (
                                         <>
                                             <td className="p-4">

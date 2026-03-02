@@ -150,8 +150,13 @@ export default function ListPage({ params }: { params: { id: string } }) {
                             </tr>
                         ) : (
                             filteredStudents.map((student: Student) => (
-                                <tr key={student.id} className="hover:bg-muted/50 transition-colors">
-                                    <td className="p-4 font-medium text-foreground">{student.name}</td>
+                                <tr key={student.id} className="hover:bg-blue-50/50 transition-all duration-200 group/row bg-white relative">
+                                    <td className="p-4 relative">
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover/row:scale-y-100 transition-transform origin-top duration-300"></div>
+                                        <div className="font-bold text-foreground group-hover/row:text-primary transition-colors duration-200">
+                                            {student.name}
+                                        </div>
+                                    </td>
                                     <td className="p-4 text-muted-foreground">{student.stage}</td>
                                     <td className="p-4 text-muted-foreground">{student.department}</td>
                                     <td className="p-4">
