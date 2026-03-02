@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useMemo, useEffect, use } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useStore, Student, Department } from '../../../lib/store';
 import { useRouter } from 'next/navigation';
 import { Trash2, Download, Search, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-export default function ListPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ListPage({ params }: { params: { id: string } }) {
     const router = useRouter();
-    const { id } = use<{ id: string }>(params);
+    const { id } = params;
     const listName = id.toUpperCase() as 'L1' | 'L2' | 'L3' | 'L4';
 
     const { currentUser, students, removeAssignment, showAlert } = useStore();
