@@ -58,59 +58,85 @@ export default function ReportsPage() {
     const exportStats = () => {
         const workbook = XLSX.utils.book_new();
 
-        // 1. Overview Sheet
-        const overviewData = [
-            { Metric: 'Total Students', Value: stats.total },
-            { Metric: 'Assigned Students', Value: stats.assigned },
-            { Metric: 'Percentage Assigned', Value: ((stats.assigned / (stats.total || 1)) * 100).toFixed(1) + '%' },
-            { Metric: 'Assignments Today', Value: stats.assignedToday }
-        ];
-        const overviewWs = XLSX.utils.json_to_sheet(overviewData);
-        XLSX.utils.book_append_sheet(workbook, overviewWs, "Overview");
+        // 1. Summary Sheet
+        const summaryData: any[] = [];
 
-        // 2. Full Assignment Data Sheet (Raw details)
-        const rawData: any[] = [];
-        students.forEach(s => {
-            Object.entries(s.assignments).forEach(([list, meta]) => {
-                if (meta) {
-                    rawData.push({
+        summaryData.push({ Category: 'OVERALL', Metric: 'Total Students', Value: stats.total });
+        summaryData.push({ Category: 'OVERALL', Metric: 'Assigned Students (Any List)', Value: stats.assigned });
+        summaryData.push({ Category: 'OVERALL', Metric: 'Unassigned Students', Value: stats.total - stats.assigned });
+        summaryData.push({ Category: '', Metric: '', Value: '' });
+
+        // List Stats
+        (['L1', 'L2', 'L3', 'L4'] as const).forEach(list => {
+            const assignedToList = students.filter(s => !!s.assignments[list]).length;
+            const notAssignedToList = stats.total - assignedToList;
+            const percentage = stats.total > 0 ? ((assignedToList / stats.total) * 100).toFixed(1) + '%' : '0%';
+
+            summaryData.push({ Category: `LIST ${list}`, Metric: 'Assigned', Value: assignedToList });
+            summaryData.push({ Category: `LIST ${list}`, Metric: 'Not Assigned', Value: notAssignedToList });
+            summaryData.push({ Category: `LIST ${list}`, Metric: 'Percentage Assigned', Value: percentage });
+            summaryData.push({ Category: '', Metric: '', Value: '' });
+        });
+
+        // Dept Stats
+        const uniqueDepts = Array.from(new Set(students.map(s => s.department))).sort();
+        uniqueDepts.forEach(dept => {
+            const inDept = students.filter(s => s.department === dept);
+            const totalInDept = inDept.length;
+            const assignedInDept = inDept.filter(s => Object.keys(s.assignments).length > 0).length;
+            const notAssignedInDept = totalInDept - assignedInDept;
+            const percentage = totalInDept > 0 ? ((assignedInDept / totalInDept) * 100).toFixed(1) + '%' : '0%';
+
+            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'Total Students', Value: totalInDept });
+            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'Assigned', Value: assignedInDept });
+            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'Not Assigned', Value: notAssignedInDept });
+            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'Percentage Assigned', Value: percentage });
+            summaryData.push({ Category: '', Metric: '', Value: '' });
+        });
+
+        const summaryWs = XLSX.utils.json_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary Stats");
+
+        // 2. Sheets for Each List (Only assignments for that list)
+        (['L1', 'L2', 'L3', 'L4'] as const).forEach(list => {
+            const listStudents = students.filter(s => !!s.assignments[list]);
+            if (listStudents.length > 0) {
+                const listData = listStudents.map(s => {
+                    const meta = s.assignments[list]!;
+                    return {
                         'Student Name': s.name,
                         'Department': s.department,
                         'Study Type': s.studyType,
-                        'List': list,
+                        'Stage': s.stage,
                         'Assigned Date': new Date(meta.date).toLocaleDateString(),
-                        'Assigned Time': new Date(meta.date).toLocaleTimeString(),
                         'Assigned By': meta.assignedByUserName
-                    });
-                }
-            });
+                    };
+                });
+                const listWs = XLSX.utils.json_to_sheet(listData);
+                XLSX.utils.book_append_sheet(workbook, listWs, `${list} Assignments`);
+            }
         });
-        const rawWs = XLSX.utils.json_to_sheet(rawData);
-        XLSX.utils.book_append_sheet(workbook, rawWs, "Detailed Assignments");
 
-        // 3. By List Summary
-        const listSummary = chartData.listData.map(d => ({
-            'List Name': d.name,
-            'Total Assignments': d.count,
-            'Percentage of Total': ((d.count / (stats.total || 1)) * 100).toFixed(1) + '%'
-        }));
-        const listWs = XLSX.utils.json_to_sheet(listSummary);
-        XLSX.utils.book_append_sheet(workbook, listWs, "Summary By List");
-
-        // 4. By Department Summary
-        const deptSummary = chartData.deptData.map(d => {
-            const totalInDept = students.filter(s => s.department === d.name).length;
-            return {
-                'Department': d.name,
-                'Assigned Students': d.count,
-                'Total Students In Dept': totalInDept,
-                'Department Percentage': ((d.count / (totalInDept || 1)) * 100).toFixed(1) + '%'
-            };
+        // 3. Sheets for Each Department (All students in the dept)
+        uniqueDepts.forEach(dept => {
+            const deptStudents = students.filter(s => s.department === dept);
+            if (deptStudents.length > 0) {
+                const deptData = deptStudents.map(s => {
+                    const assignedLists = Object.keys(s.assignments).join(', ') || 'Unassigned';
+                    return {
+                        'Student Name': s.name,
+                        'Study Type': s.studyType,
+                        'Stage': s.stage,
+                        'Assignments': assignedLists
+                    };
+                });
+                const deptWs = XLSX.utils.json_to_sheet(deptData);
+                const safeDeptName = dept.substring(0, 25);
+                XLSX.utils.book_append_sheet(workbook, deptWs, `Dept ${safeDeptName}`);
+            }
         });
-        const deptWs = XLSX.utils.json_to_sheet(deptSummary);
-        XLSX.utils.book_append_sheet(workbook, deptWs, "Summary By Dept");
 
-        XLSX.writeFile(workbook, `full_assignment_stats_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.writeFile(workbook, `comprehensive_report_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
     const [calcType, setCalcType] = useState<'List' | 'Department'>('List');

@@ -107,11 +107,12 @@ export default function ListPage({ params }: { params: { id: string } }) {
                             onChange={(e) => setDeptFilter(e.target.value as any)}
                         >
                             <option value="All">All Departments</option>
-                            <option value="Art">Art</option>
-                            <option value="English">English</option>
-                            <option value="Chemical">Chemical</option>
-                            <option value="Math">Math</option>
-                            <option value="Computer Science">Computer Science</option>
+                            {(['Art', 'English', 'Chemical', 'Math', 'Computer Science'] as Department[]).map(dept => {
+                                if (currentUser?.role === 'Viewer' && !currentUser.allowedDepartments?.includes(dept)) {
+                                    return null;
+                                }
+                                return <option key={dept} value={dept}>{dept}</option>;
+                            })}
                         </select>
                     </div>
 
