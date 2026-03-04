@@ -12,7 +12,7 @@ import {
 
 export default function ReportsPage() {
     const router = useRouter();
-    const { currentUser, students, showAlert, isInitialized, isHydrated } = useStore();
+    const { currentUser, students, departments, showAlert, isInitialized, isHydrated } = useStore();
     const [mounted, setMounted] = useState(false);
     const [chartView, setChartView] = useState<'List' | 'Department'>('List');
 
@@ -44,10 +44,9 @@ export default function ReportsPage() {
             count: students.filter(s => !!s.assignments[list]).length
         }));
 
-        const uniqueDepts = Array.from(new Set(students.map(s => s.department))).sort();
-        const deptData = uniqueDepts.map(dept => ({
+        const deptData = departments.map((dept: string) => ({
             name: dept,
-            count: students.filter(s => s.department === dept && Object.keys(s.assignments).length > 0).length
+            count: students.filter((s: Student) => s.department === dept && Object.keys(s.assignments).length > 0).length
         }));
 
         return { listData, deptData };
@@ -79,8 +78,7 @@ export default function ReportsPage() {
         });
 
         // Dept Stats
-        const uniqueDepts = Array.from(new Set(students.map(s => s.department))).sort();
-        uniqueDepts.forEach(dept => {
+        departments.forEach((dept: string) => {
             const inDept = students.filter(s => s.department === dept);
             const totalInDept = inDept.length;
             const assignedInDept = inDept.filter(s => Object.keys(s.assignments).length > 0).length;
@@ -118,7 +116,7 @@ export default function ReportsPage() {
         });
 
         // 3. Sheets for Each Department (All students in the dept)
-        uniqueDepts.forEach(dept => {
+        departments.forEach((dept: string) => {
             const deptStudents = students.filter(s => s.department === dept);
             if (deptStudents.length > 0) {
                 const deptData = deptStudents.map(s => {
@@ -143,14 +141,13 @@ export default function ReportsPage() {
     const [calcSelection, setCalcSelection] = useState<string>('L1');
 
     const groupedCalcData = useMemo(() => {
-        const uniqueDepts = Array.from(new Set(students.map(s => s.department))).sort();
         if (calcType === 'List') {
             const listKey = calcSelection as 'L1' | 'L2' | 'L3' | 'L4';
             const inList = students.filter(s => !!s.assignments[listKey]);
             const totalInList = inList.length;
             if (totalInList === 0) return [];
 
-            return uniqueDepts.map(dept => {
+            return departments.map((dept: string) => {
                 const count = inList.filter(s => s.department === dept).length;
                 return { name: dept, count, percent: ((count / totalInList) * 100).toFixed(1) };
             }).filter(d => parseFloat(d.percent) > 0);
@@ -268,7 +265,7 @@ export default function ReportsPage() {
                             value={calcType}
                             onChange={(e) => {
                                 setCalcType(e.target.value as 'List' | 'Department');
-                                setCalcSelection(e.target.value === 'List' ? 'L1' : Array.from(new Set(students.map(s => s.department)))[0] || '');
+                                setCalcSelection(e.target.value === 'List' ? 'L1' : departments[0] || '');
                             }}
                         >
                             <option value="List">List (L1-L4)</option>
@@ -283,7 +280,7 @@ export default function ReportsPage() {
                                     <option value="L1">L1</option><option value="L2">L2</option><option value="L3">L3</option><option value="L4">L4</option>
                                 </>
                             ) : (
-                                Array.from(new Set(students.map(s => s.department))).sort().map(dept => <option key={dept} value={dept}>{dept}</option>)
+                                departments.map((dept: string) => <option key={dept} value={dept}>{dept}</option>)
                             )}
                         </select>
                     </div>

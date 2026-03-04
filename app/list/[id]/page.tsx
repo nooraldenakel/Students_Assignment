@@ -11,7 +11,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
     const { id } = params;
     const listName = id.toUpperCase() as 'L1' | 'L2' | 'L3' | 'L4';
 
-    const { currentUser, students, removeAssignment, showAlert, isInitialized, isHydrated } = useStore();
+    const { currentUser, students, departments, removeAssignment, showAlert, isInitialized, isHydrated } = useStore();
     const [mounted, setMounted] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
@@ -112,7 +112,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
                             onChange={(e) => setDeptFilter(e.target.value as any)}
                         >
                             <option value="All">All Departments</option>
-                            {(['Art', 'English', 'Chemical', 'Math', 'Computer Science'] as Department[]).map(dept => {
+                            {departments.map(dept => {
                                 if (currentUser?.role === 'Viewer' && !currentUser.allowedDepartments?.includes(dept)) {
                                     return null;
                                 }

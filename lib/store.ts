@@ -13,7 +13,7 @@ export interface User {
     allowedDepartments?: Department[];
 }
 
-export type Department = 'Art' | 'English' | 'Chemical' | 'Math' | 'Computer Science';
+export type Department = string;
 export type StudyType = 'Morning' | 'Evening';
 
 export interface AssignmentMeta {
@@ -44,6 +44,7 @@ interface AppState {
     l2Enabled: boolean;
     l3Enabled: boolean;
     l4Enabled: boolean;
+    departments: string[];
     isInitialized: boolean;
     isHydrated: boolean;
 
@@ -57,6 +58,9 @@ interface AppState {
     removeUser: (userId: string) => Promise<void>;
     updateUserRole: (userId: string, newRole: Role) => Promise<void>;
     updateUserDepartments: (userId: string, departments: Department[]) => Promise<void>;
+
+    addDepartment: (name: string) => Promise<void>;
+    removeDepartment: (name: string) => Promise<void>;
 
     updateStudent: (id: string, updates: Partial<Student>) => Promise<void>;
     toggleAssignment: (studentId: string, list: 'L1' | 'L2' | 'L3' | 'L4', user: User) => Promise<void>;
@@ -93,6 +97,7 @@ export const useStore = create<AppState>()(
             l2Enabled: true,
             l3Enabled: true,
             l4Enabled: true,
+            departments: [],
             isInitialized: false,
             isHydrated: false,
 
@@ -103,12 +108,17 @@ export const useStore = create<AppState>()(
                 isInitializing = true;
 
                 // 1. Initial Fetch
-                const [usersRes, studentsRes, assignRes, settingsRes] = await Promise.all([
+                const [usersRes, studentsRes, assignRes, settingsRes, deptRes] = await Promise.all([
                     supabase.from('app_users').select('*'),
                     supabase.from('students').select('*'),
                     supabase.from('assignments').select('*'),
-                    supabase.from('settings').select('*').eq('id', 1).single()
+                    supabase.from('settings').select('*').eq('id', 1).single(),
+                    supabase.from('departments').select('*').order('name')
                 ]);
+
+                if (deptRes.data) {
+                    set({ departments: deptRes.data.map(d => d.name) });
+                }
 
                 if (usersRes.data) {
                     const parsedUsers = usersRes.data.map(u => ({
@@ -264,6 +274,15 @@ export const useStore = create<AppState>()(
             updateUserDepartments: async (userId, departments) => {
                 set(state => ({ users: state.users.map(u => u.id === userId ? { ...u, allowedDepartments: departments } : u) }));
                 await supabase.from('app_users').update({ allowed_departments: departments }).eq('id', userId);
+            },
+
+            addDepartment: async (name) => {
+                set(state => ({ departments: [...state.departments, name].sort() }));
+                await supabase.from('departments').insert({ name });
+            },
+            removeDepartment: async (name) => {
+                set(state => ({ departments: state.departments.filter(d => d !== name) }));
+                await supabase.from('departments').delete().eq('name', name);
             },
 
             updateStudent: async (id, updates) => {

@@ -12,7 +12,7 @@ export default function MainPage() {
         currentUser, students,
         l1Enabled, l2Enabled, l3Enabled, l4Enabled,
         toggleAssignment, updateStudent, clearAssignmentsByList,
-        showAlert, isInitialized, isHydrated
+        showAlert, isInitialized, isHydrated, departments
     } = useStore();
     const [mounted, setMounted] = useState(false);
 
@@ -154,11 +154,9 @@ export default function MainPage() {
                         onChange={(e) => setDeptFilter(e.target.value as any)}
                     >
                         <option value="All">All Departments</option>
-                        <option value="Art">Art</option>
-                        <option value="English">English</option>
-                        <option value="Chemical">Chemical</option>
-                        <option value="Math">Math</option>
-                        <option value="Computer Science">Computer Science</option>
+                        {departments.map((dept: string) => (
+                            <option key={dept} value={dept}>{dept}</option>
+                        ))}
                     </select>
 
                     <select
@@ -238,9 +236,9 @@ export default function MainPage() {
                             </tr>
                         ) : (
                             filteredStudents.map((student: Student) => (
-                                <tr key={student.id} className="hover:bg-blue-50/50 transition-all duration-200 group/row bg-white relative">
+                                <tr key={student.id} className={`hover:bg-blue-50/50 transition-all duration-200 group/row bg-white relative ${editingId === student.id ? 'bg-blue-50/30' : ''}`}>
                                     <td className="p-4 relative">
-                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary scale-y-0 group-hover/row:scale-y-100 transition-transform origin-top duration-300"></div>
+                                        <div className={`absolute left-0 top-0 bottom-0 w-1 bg-primary origin-top duration-300 transition-transform ${editingId === student.id ? 'scale-y-100' : 'scale-y-0 group-hover/row:scale-y-100'}`}></div>
                                         <div className="font-bold text-foreground group-hover/row:text-primary transition-colors duration-200">
                                             {student.name}
                                         </div>
@@ -252,20 +250,18 @@ export default function MainPage() {
                                                     type="text"
                                                     value={editStage}
                                                     onChange={(e) => setEditStage(e.target.value)}
-                                                    className="w-full px-3 py-1.5 border border-border rounded-lg outline-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-sm"
+                                                    className="w-full px-4 py-2 border border-border rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm text-foreground bg-white shadow-sm"
                                                 />
                                             </td>
                                             <td className="p-4">
                                                 <select
                                                     value={editDept}
                                                     onChange={(e) => setEditDept(e.target.value as Department)}
-                                                    className="w-full px-3 py-1.5 border border-border rounded-lg outline-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-sm"
+                                                    className="w-full px-4 py-2 border border-transparent bg-gray-100 hover:bg-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm text-foreground"
                                                 >
-                                                    <option value="Art">Art</option>
-                                                    <option value="English">English</option>
-                                                    <option value="Chemical">Chemical</option>
-                                                    <option value="Math">Math</option>
-                                                    <option value="Computer Science">Computer Science</option>
+                                                    {departments.map((dept: string) => (
+                                                        <option key={dept} value={dept}>{dept}</option>
+                                                    ))}
                                                 </select>
                                             </td>
                                         </>
@@ -317,7 +313,8 @@ export default function MainPage() {
                                             ) : (
                                                 <button
                                                     onClick={() => startEdit(student)}
-                                                    className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                                    className="p-2 text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-600 hover:text-white rounded-lg transition-all opacity-70 group-hover:opacity-100 flex items-center justify-center ml-auto shadow-sm"
+                                                    title="Edit Student"
                                                 >
                                                     <Edit2 className="w-4 h-4" />
                                                 </button>
