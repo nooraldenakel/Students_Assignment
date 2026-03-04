@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { supabase } from './supabase';
 
 export type Role = 'Admin' | 'Operator' | 'Viewer';
 
@@ -7,7 +8,7 @@ export interface User {
     id: string;
     name: string;
     email: string;
-    password?: string; // Optional for security/demo, but required for login
+    password?: string;
     role: Role;
     allowedDepartments?: Department[];
 }
@@ -43,30 +44,32 @@ interface AppState {
     l2Enabled: boolean;
     l3Enabled: boolean;
     l4Enabled: boolean;
+    isInitialized: boolean;
+    isHydrated: boolean;
 
-    // Actions
+    setHydrated: () => void;
+    initRealtime: () => Promise<void>;
+
     login: (email: string, password: string) => boolean;
     logout: () => void;
 
-    // User Management Actions
-    addUser: (name: string, email: string, password: string, role: Role, allowedDepartments?: Department[]) => void;
-    removeUser: (userId: string) => void;
-    updateUserRole: (userId: string, newRole: Role) => void;
-    updateUserDepartments: (userId: string, departments: Department[]) => void;
+    addUser: (name: string, email: string, password: string, role: Role, allowedDepartments?: Department[]) => Promise<void>;
+    removeUser: (userId: string) => Promise<void>;
+    updateUserRole: (userId: string, newRole: Role) => Promise<void>;
+    updateUserDepartments: (userId: string, departments: Department[]) => Promise<void>;
 
-    updateStudent: (id: string, updates: Partial<Student>) => void;
-    toggleAssignment: (studentId: string, list: 'L1' | 'L2' | 'L3' | 'L4', user: User) => void;
-    removeAssignment: (studentId: string, list: 'L1' | 'L2' | 'L3' | 'L4', user: User) => void;
-    clearAllAssignments: () => void;
-    clearAssignmentsByList: (list: 'L1' | 'L2' | 'L3' | 'L4') => void;
-    clearAssignmentsByDepartment: (dept: Department) => void;
+    updateStudent: (id: string, updates: Partial<Student>) => Promise<void>;
+    toggleAssignment: (studentId: string, list: 'L1' | 'L2' | 'L3' | 'L4', user: User) => Promise<void>;
+    removeAssignment: (studentId: string, list: 'L1' | 'L2' | 'L3' | 'L4', user: User) => Promise<void>;
+    clearAllAssignments: () => Promise<void>;
+    clearAssignmentsByList: (list: 'L1' | 'L2' | 'L3' | 'L4') => Promise<void>;
+    clearAssignmentsByDepartment: (dept: Department) => Promise<void>;
 
-    setL1Enabled: (enabled: boolean) => void;
-    setL2Enabled: (enabled: boolean) => void;
-    setL3Enabled: (enabled: boolean) => void;
-    setL4Enabled: (enabled: boolean) => void;
+    setL1Enabled: (enabled: boolean) => Promise<void>;
+    setL2Enabled: (enabled: boolean) => Promise<void>;
+    setL3Enabled: (enabled: boolean) => Promise<void>;
+    setL4Enabled: (enabled: boolean) => Promise<void>;
 
-    // Alert/Confirm System
     alert: {
         isOpen: boolean;
         title: string;
@@ -78,142 +81,319 @@ interface AppState {
     hideAlert: () => void;
 }
 
-const mockStudents: Student[] = [
-    { id: '1', name: 'Alice Smith', stage: 'Stage 1', department: 'Art', studyType: 'Morning', assignments: {} },
-    { id: '2', name: 'Bob Johnson', stage: 'Stage 2', department: 'Math', studyType: 'Evening', assignments: {} },
-    { id: '3', name: 'Charlie Brown', stage: 'Stage 3', department: 'English', studyType: 'Morning', assignments: {} },
-    { id: '4', name: 'Diana Prince', stage: 'Stage 1', department: 'Chemical', studyType: 'Evening', assignments: {} },
-    { id: '5', name: 'Evan Wright', stage: 'Stage 4', department: 'Computer Science', studyType: 'Morning', assignments: {} },
-    { id: '6', name: 'Fiona Gallagher', stage: 'Stage 2', department: 'Art', studyType: 'Morning', assignments: {} },
-];
-
-const mockUsers: User[] = [
-    { id: 'u1', name: 'Super Admin', email: 'admin@edu.com', password: '123', role: 'Admin' },
-    { id: 'u2', name: 'John Operator', email: 'op@edu.com', password: '123', role: 'Operator' },
-    { id: 'u3', name: 'Jane Viewer', email: 'view@edu.com', password: '123', role: 'Viewer', allowedDepartments: ['Art', 'Math'] },
-];
+let isInitializing = false;
 
 export const useStore = create<AppState>()(
     persist(
-        (set) => ({
-            users: mockUsers,
+        (set, get) => ({
+            users: [],
             currentUser: null,
-            students: mockStudents,
+            students: [],
             l1Enabled: true,
             l2Enabled: true,
             l3Enabled: true,
             l4Enabled: true,
+            isInitialized: false,
+            isHydrated: false,
+
+            setHydrated: () => set({ isHydrated: true }),
+
+            initRealtime: async () => {
+                if (get().isInitialized || isInitializing) return;
+                isInitializing = true;
+
+                // 1. Initial Fetch
+                const [usersRes, studentsRes, assignRes, settingsRes] = await Promise.all([
+                    supabase.from('app_users').select('*'),
+                    supabase.from('students').select('*'),
+                    supabase.from('assignments').select('*'),
+                    supabase.from('settings').select('*').eq('id', 1).single()
+                ]);
+
+                if (usersRes.data) {
+                    const parsedUsers = usersRes.data.map(u => ({
+                        id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role,
+                        allowedDepartments: u.allowed_departments as Department[] | undefined
+                    }));
+                    set({ users: parsedUsers });
+                }
+
+                if (studentsRes.data && assignRes.data) {
+                    const parsedStudents: Student[] = studentsRes.data.map(s => {
+                        const sAssigns = assignRes.data.filter(a => a.student_id === s.id);
+                        const assignmentsObj: any = {};
+                        sAssigns.forEach(a => {
+                            assignmentsObj[a.list_id] = {
+                                date: a.assigned_date,
+                                assignedByUserId: a.assigned_by_user_id,
+                                assignedByUserName: a.assigned_by_user_name
+                            };
+                        });
+                        return {
+                            id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: assignmentsObj
+                        };
+                    });
+                    set({ students: parsedStudents });
+                }
+
+                if (settingsRes.data) {
+                    set({
+                        l1Enabled: settingsRes.data.l1_enabled,
+                        l2Enabled: settingsRes.data.l2_enabled,
+                        l3Enabled: settingsRes.data.l3_enabled,
+                        l4Enabled: settingsRes.data.l4_enabled,
+                    });
+                }
+
+                set({ isInitialized: true });
+
+                // 2. Setup Realtime Subscriptions (Single Channel for better reliability)
+                const channel = supabase.channel('schema-db-changes');
+
+                channel.on('postgres_changes', { event: '*', schema: 'public', table: 'app_users' }, (payload) => {
+                    const u = payload.new as any;
+                    if (payload.eventType === 'INSERT') {
+                        set(state => {
+                            // Check if already exists to prevent duplicate optimistic updates
+                            if (state.users.some(existing => existing.id === u.id)) return state;
+                            return { users: [...state.users, { id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined }] };
+                        });
+                    } else if (payload.eventType === 'UPDATE') {
+                        set(state => ({ users: state.users.map(user => user.id === u.id ? { id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined } : user) }));
+                    } else if (payload.eventType === 'DELETE') {
+                        set(state => ({ users: state.users.filter(user => user.id !== payload.old.id) }));
+                    }
+                });
+
+                channel.on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, (payload) => {
+                    const s = payload.new as any;
+                    if (payload.eventType === 'INSERT') {
+                        set(state => ({ students: [...state.students, { id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: {} }] }));
+                    } else if (payload.eventType === 'UPDATE') {
+                        set(state => ({ students: state.students.map(st => st.id === s.id ? { ...st, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType } : st) }));
+                    } else if (payload.eventType === 'DELETE') {
+                        set(state => ({ students: state.students.filter(st => st.id !== payload.old.id) }));
+                    }
+                });
+
+                channel.on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, (payload) => {
+                    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                        const newA = payload.new as any;
+                        set(state => {
+                            return {
+                                students: state.students.map(st => {
+                                    if (st.id === newA.student_id) {
+                                        return {
+                                            ...st,
+                                            assignments: {
+                                                ...st.assignments,
+                                                [newA.list_id]: {
+                                                    date: newA.assigned_date,
+                                                    assignedByUserId: newA.assigned_by_user_id,
+                                                    assignedByUserName: newA.assigned_by_user_name
+                                                }
+                                            }
+                                        };
+                                    }
+                                    return st;
+                                })
+                            };
+                        });
+                    } else if (payload.eventType === 'DELETE') {
+                        const oldA = payload.old as any;
+                        set(state => {
+                            return {
+                                students: state.students.map(st => {
+                                    if (st.id === oldA.student_id) {
+                                        const newAssignments = { ...st.assignments };
+                                        delete (newAssignments as any)[oldA.list_id];
+                                        return { ...st, assignments: newAssignments };
+                                    }
+                                    return st;
+                                })
+                            };
+                        });
+                    }
+                });
+
+                channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'settings' }, (payload) => {
+                    const newS = payload.new as any;
+                    set({
+                        l1Enabled: newS.l1_enabled,
+                        l2Enabled: newS.l2_enabled,
+                        l3Enabled: newS.l3_enabled,
+                        l4Enabled: newS.l4_enabled,
+                    });
+                });
+
+                channel.subscribe();
+            },
 
             login: (email, password) => {
-                let success = false;
-                set((state) => {
-                    const user = state.users.find(u => u.email === email && u.password === password);
-                    if (user) {
-                        success = true;
-                        return { currentUser: user };
-                    }
-                    return state;
-                });
-                return success;
+                const user = get().users.find(u => u.email === email && u.password === password);
+                if (user) {
+                    set({ currentUser: user });
+                    return true;
+                }
+                return false;
             },
             logout: () => set({ currentUser: null }),
 
-            addUser: (name, email, password, role, allowedDepartments) => set((state) => ({
-                users: [...state.users, { id: Math.random().toString(36).substr(2, 9), name, email, password, role, allowedDepartments }]
-            })),
+            addUser: async (name, email, password, role, allowedDepartments) => {
+                // Optimistic UUID generation
+                const tempId = crypto.randomUUID();
+                set(state => ({
+                    users: [...state.users, { id: tempId, name, email, password, role, allowedDepartments }]
+                }));
+                const { data, error } = await supabase.from('app_users').insert({ name, email, password, role, allowed_departments: allowedDepartments }).select().single();
+                if (data && !error) {
+                    // Update temp ID to real ID silently
+                    set(state => ({
+                        users: state.users.map(u => u.id === tempId ? { ...u, id: data.id } : u)
+                    }));
+                }
+            },
+            removeUser: async (userId) => {
+                set(state => ({ users: state.users.filter(u => u.id !== userId) }));
+                await supabase.from('app_users').delete().eq('id', userId);
+            },
+            updateUserRole: async (userId, newRole) => {
+                set(state => ({ users: state.users.map(u => u.id === userId ? { ...u, role: newRole } : u) }));
+                await supabase.from('app_users').update({ role: newRole }).eq('id', userId);
+            },
+            updateUserDepartments: async (userId, departments) => {
+                set(state => ({ users: state.users.map(u => u.id === userId ? { ...u, allowedDepartments: departments } : u) }));
+                await supabase.from('app_users').update({ allowed_departments: departments }).eq('id', userId);
+            },
 
-            removeUser: (userId) => set((state) => ({
-                users: state.users.filter(u => u.id !== userId)
-            })),
+            updateStudent: async (id, updates) => {
+                set(state => ({
+                    students: state.students.map(s => s.id === id ? { ...s, ...updates } : s)
+                }));
+                const dbUpdates: any = {};
+                if (updates.name) dbUpdates.name = updates.name;
+                if (updates.stage) dbUpdates.stage = updates.stage;
+                if (updates.department) dbUpdates.department = updates.department;
+                if (updates.studyType) dbUpdates.study_type = updates.studyType;
+                await supabase.from('students').update(dbUpdates).eq('id', id);
+            },
 
-            updateUserRole: (userId, newRole) => set((state) => ({
-                users: state.users.map(u => u.id === userId ? { ...u, role: newRole } : u)
-            })),
+            toggleAssignment: async (studentId, list, user) => {
+                const student = get().students.find(s => s.id === studentId);
+                if (!student) return;
 
-            updateUserDepartments: (userId, departments) => set((state) => ({
-                users: state.users.map(u => u.id === userId ? { ...u, allowedDepartments: departments } : u)
-            })),
-
-            updateStudent: (id, updates) => set((state) => ({
-                students: state.students.map(s => s.id === id ? { ...s, ...updates } : s)
-            })),
-
-            alert: { isOpen: false, title: '', message: '', type: 'info' },
-            showAlert: (title, message, type, onConfirm) => set({
-                alert: { isOpen: true, title, message, type, onConfirm }
-            }),
-            hideAlert: () => set((state) => ({
-                alert: { ...state.alert, isOpen: false }
-            })),
-
-            toggleAssignment: (studentId, list, user) => set((state) => {
-                const student = state.students.find(s => s.id === studentId);
-                if (!student) return state;
-
-                const isAssigned = !!student.assignments[list];
-                const newAssignments = { ...student.assignments };
-
+                const isAssigned = !!(student.assignments as any)[list];
                 if (isAssigned) {
                     if (user.role !== 'Admin') {
-                        state.showAlert('Access Denied', 'Only administrators can remove assignments.', 'error');
-                        return state;
+                        get().showAlert('Access Denied', 'Only administrators can remove assignments.', 'error');
+                        return;
                     }
-                    delete newAssignments[list];
+                    // Optimistic update
+                    set(state => {
+                        const std = state.students.find(s => s.id === studentId);
+                        if (!std) return state;
+                        const newAssigns = { ...std.assignments };
+                        delete (newAssigns as any)[list];
+                        return { students: state.students.map(s => s.id === studentId ? { ...s, assignments: newAssigns } : s) };
+                    });
+                    await supabase.from('assignments').delete().eq('student_id', studentId).eq('list_id', list);
                 } else {
-                    newAssignments[list] = {
-                        date: new Date().toISOString(),
-                        assignedByUserId: user.id,
-                        assignedByUserName: user.name
+                    const newAssignment = {
+                        student_id: studentId,
+                        list_id: list,
+                        assigned_by_user_id: user.id,
+                        assigned_by_user_name: user.name,
+                        assigned_date: new Date().toISOString()
                     };
+                    // Optimistic update
+                    set(state => {
+                        const std = state.students.find(s => s.id === studentId);
+                        if (!std) return state;
+                        return {
+                            students: state.students.map(s => s.id === studentId ? {
+                                ...s, assignments: {
+                                    ...s.assignments,
+                                    [list]: { date: newAssignment.assigned_date, assignedByUserId: user.id, assignedByUserName: user.name }
+                                }
+                            } : s)
+                        };
+                    });
+                    await supabase.from('assignments').insert(newAssignment);
                 }
+            },
 
-                return {
-                    students: state.students.map(s => s.id === studentId ? { ...s, assignments: newAssignments } : s)
-                };
-            }),
-
-            removeAssignment: (studentId, list, user) => set((state) => {
+            removeAssignment: async (studentId, list, user) => {
                 if (user.role !== 'Admin') {
-                    state.showAlert('Access Denied', 'Only administrators can remove assignments.', 'error');
-                    return state;
+                    get().showAlert('Access Denied', 'Only administrators can remove assignments.', 'error');
+                    return;
                 }
-                const student = state.students.find(s => s.id === studentId);
-                if (!student) return state;
-                const newAssignments = { ...student.assignments };
-                delete newAssignments[list];
-                return {
-                    students: state.students.map(s => s.id === studentId ? { ...s, assignments: newAssignments } : s)
-                };
-            }),
+                // Optimistic
+                set(state => {
+                    const std = state.students.find(s => s.id === studentId);
+                    if (!std) return state;
+                    const newAssigns = { ...std.assignments };
+                    delete (newAssigns as any)[list];
+                    return { students: state.students.map(s => s.id === studentId ? { ...s, assignments: newAssigns } : s) };
+                });
+                await supabase.from('assignments').delete().eq('student_id', studentId).eq('list_id', list);
+            },
 
-            clearAllAssignments: () => set((state) => ({
-                students: state.students.map(s => ({ ...s, assignments: {} }))
-            })),
-
-            clearAssignmentsByList: (list) => set((state) => ({
-                students: state.students.map(s => {
-                    const newAssignments = { ...s.assignments };
-                    delete newAssignments[list];
-                    return { ...s, assignments: newAssignments };
-                })
-            })),
-
-            clearAssignmentsByDepartment: (dept) => set((state) => ({
-                students: state.students.map(s => {
-                    if (s.department === dept) {
+            clearAllAssignments: async () => {
+                set(state => ({
+                    students: state.students.map(s => ({ ...s, assignments: {} }))
+                }));
+                await supabase.from('assignments').delete().neq('student_id', '00000000-0000-0000-0000-000000000000'); // Delete all
+            },
+            clearAssignmentsByList: async (list) => {
+                set(state => ({
+                    students: state.students.map(s => {
+                        const newAssigns = { ...s.assignments };
+                        delete (newAssigns as any)[list];
+                        return { ...s, assignments: newAssigns };
+                    })
+                }));
+                await supabase.from('assignments').delete().eq('list_id', list);
+            },
+            clearAssignmentsByDepartment: async (dept) => {
+                set(state => ({
+                    students: state.students.map(s => {
+                        if (s.department !== dept) return s;
                         return { ...s, assignments: {} };
-                    }
-                    return s;
-                })
-            })),
+                    })
+                }));
+                const studentsInDept = get().students.filter(s => s.department === dept);
+                if (studentsInDept.length === 0) return;
+                const ids = studentsInDept.map(s => s.id);
+                await supabase.from('assignments').delete().in('student_id', ids);
+            },
 
-            setL1Enabled: (enabled) => set({ l1Enabled: enabled }),
-            setL2Enabled: (enabled) => set({ l2Enabled: enabled }),
-            setL3Enabled: (enabled) => set({ l3Enabled: enabled }),
-            setL4Enabled: (enabled) => set({ l4Enabled: enabled }),
+            setL1Enabled: async (enabled) => {
+                set({ l1Enabled: enabled });
+                await supabase.from('settings').update({ l1_enabled: enabled }).eq('id', 1);
+            },
+            setL2Enabled: async (enabled) => {
+                set({ l2Enabled: enabled });
+                await supabase.from('settings').update({ l2_enabled: enabled }).eq('id', 1);
+            },
+            setL3Enabled: async (enabled) => {
+                set({ l3Enabled: enabled });
+                await supabase.from('settings').update({ l3_enabled: enabled }).eq('id', 1);
+            },
+            setL4Enabled: async (enabled) => {
+                set({ l4Enabled: enabled });
+                await supabase.from('settings').update({ l4_enabled: enabled }).eq('id', 1);
+            },
+
+            alert: { isOpen: false, title: '', message: '', type: 'info' },
+            showAlert: (title, message, type, onConfirm) => set({ alert: { isOpen: true, title, message, type, onConfirm } }),
+            hideAlert: () => set((state) => ({ alert: { ...state.alert, isOpen: false } })),
         }),
         {
-            name: 'student-list-storage-v5',
+            name: 'student-list-auth-v2',
+            partialize: (state) => ({ currentUser: state.currentUser }), // Only persist the logged in user
+            onRehydrateStorage: () => (state) => {
+                if (state) state.setHydrated();
+            },
         }
     )
 );

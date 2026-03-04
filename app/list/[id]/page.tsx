@@ -11,7 +11,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
     const { id } = params;
     const listName = id.toUpperCase() as 'L1' | 'L2' | 'L3' | 'L4';
 
-    const { currentUser, students, removeAssignment, showAlert } = useStore();
+    const { currentUser, students, removeAssignment, showAlert, isInitialized, isHydrated } = useStore();
     const [mounted, setMounted] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
@@ -39,7 +39,12 @@ export default function ListPage({ params }: { params: { id: string } }) {
         });
     }, [students, listName, currentUser, searchTerm, deptFilter, stageFilter]);
 
-    if (!mounted || !currentUser) return null;
+    if (!mounted || !isInitialized || !isHydrated) return (
+        <div className="flex items-center justify-center h-[50vh]">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+    );
+    if (!currentUser) return null;
 
     const exportListToExcel = () => {
         if (filteredStudents.length === 0) {

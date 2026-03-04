@@ -1,0 +1,20 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000",
+  "loginUser": "admin@edu.com",
+  "loginPassword": "123",
+  "executionArgs": {
+    "projectName": "new",
+    "projectPath": "c:\\Users\\O_O\\new",
+    "testIds": [],
+    "additionalInstruction": "Ensure you test creating a user or deleting it, using that user to login, making a different user, assigning a student, exporting data, and filtering data by department or stage.",
+    "serverMode": "production",
+    "envs": {
+      "API_KEY": "sk-user-PR2QbYH2LySivXyDwCDZN1O2jm2C1LrujWKoAVlJIKLM85QaQyBsPsABa23jM7fd74ARTJZConMHmH_0Py0ElKy0l1QJYf6Cp6nWUiH9ftvP5iXBfsxFutJBjJ-BXNkoqCc"
+    }
+  },
+  "serverPort": 49332,
+  "proxy": "http://706bce1b-3398-4b78-842b-09aa05e1733f:gsGWau2dcjlEqomrOrTeqCEBz0SuAz0G@tun.testsprite.com:8080"
+}

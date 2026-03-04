@@ -12,7 +12,7 @@ export default function MainPage() {
         currentUser, students,
         l1Enabled, l2Enabled, l3Enabled, l4Enabled,
         toggleAssignment, updateStudent, clearAssignmentsByList,
-        showAlert
+        showAlert, isInitialized, isHydrated
     } = useStore();
     const [mounted, setMounted] = useState(false);
 
@@ -70,7 +70,12 @@ export default function MainPage() {
         return { totalAssigned, assignedToday };
     }, [students, currentUser]);
 
-    if (!mounted || !currentUser || currentUser.role === 'Viewer') return null;
+    if (!mounted || !isInitialized || !isHydrated) return (
+        <div className="flex items-center justify-center h-[50vh]">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+    );
+    if (!currentUser || currentUser.role === 'Viewer') return null;
 
     const canEdit = currentUser.role === 'Admin' || currentUser.role === 'Operator';
     const canAssign = currentUser.role === 'Admin' || currentUser.role === 'Operator';

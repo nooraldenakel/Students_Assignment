@@ -12,7 +12,7 @@ import {
 
 export default function ReportsPage() {
     const router = useRouter();
-    const { currentUser, students, showAlert } = useStore();
+    const { currentUser, students, showAlert, isInitialized, isHydrated } = useStore();
     const [mounted, setMounted] = useState(false);
     const [chartView, setChartView] = useState<'List' | 'Department'>('List');
 
@@ -166,7 +166,12 @@ export default function ReportsPage() {
         }
     }, [students, calcType, calcSelection]);
 
-    if (!mounted || !currentUser || currentUser.role !== 'Admin') return null;
+    if (!mounted || !isInitialized || !isHydrated) return (
+        <div className="flex items-center justify-center h-[50vh]">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+    );
+    if (!currentUser || currentUser.role !== 'Admin') return null;
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto">

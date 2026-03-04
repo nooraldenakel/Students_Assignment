@@ -15,7 +15,7 @@ export default function SettingsPage() {
         l1Enabled, l2Enabled, l3Enabled, l4Enabled,
         setL1Enabled, setL2Enabled, setL3Enabled, setL4Enabled,
         users, addUser, removeUser, updateUserRole, updateUserDepartments,
-        showAlert
+        showAlert, isInitialized, isHydrated
     } = useStore();
     const [mounted, setMounted] = useState(false);
 
@@ -37,7 +37,12 @@ export default function SettingsPage() {
         }
     }, [currentUser, router]);
 
-    if (!mounted || !currentUser || currentUser.role !== 'Admin') return null;
+    if (!mounted || !isInitialized || !isHydrated) return (
+        <div className="flex items-center justify-center h-[50vh]">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+    );
+    if (!currentUser || currentUser.role !== 'Admin') return null;
 
     const handleAddUser = (e: React.FormEvent) => {
         e.preventDefault();
@@ -326,8 +331,8 @@ export default function SettingsPage() {
                                     filteredUsers.map(u => (
                                         <div key={u.id} className={`flex items-center gap-4 p-3 border rounded-xl bg-white transition-all hover:bg-gray-50/50 group ${u.id === currentUser.id ? 'border-primary/20 bg-primary/5' : 'border-border'}`}>
                                             <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center font-black text-xs ${u.role === 'Admin' ? 'bg-red-50 text-red-600' :
-                                                    u.role === 'Operator' ? 'bg-blue-50 text-primary' :
-                                                        'bg-green-50 text-green-600'
+                                                u.role === 'Operator' ? 'bg-blue-50 text-primary' :
+                                                    'bg-green-50 text-green-600'
                                                 }`}>
                                                 {u.name.split(' ').map(n => n[0]).join('')}
                                             </div>
@@ -336,8 +341,8 @@ export default function SettingsPage() {
                                                 <div className="flex items-center gap-2">
                                                     <p className="font-bold text-foreground text-sm truncate uppercase tracking-tight">{u.name}</p>
                                                     <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shrink-0 ${u.role === 'Admin' ? 'bg-red-100 text-red-700' :
-                                                            u.role === 'Operator' ? 'bg-blue-100 text-blue-700' :
-                                                                'bg-green-100 text-green-700'
+                                                        u.role === 'Operator' ? 'bg-blue-100 text-blue-700' :
+                                                            'bg-green-100 text-green-700'
                                                         }`}>
                                                         {u.role}
                                                     </span>

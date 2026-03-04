@@ -1,0 +1,1236 @@
+[
+  {
+    "id": "TC001",
+    "title": "Login with valid credentials redirects to dashboard",
+    "description": "Verifies an admin can sign in from the login page and is redirected to the main dashboard.",
+    "category": "Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"Dashboard\""
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Invalid password shows error on login",
+    "description": "Verifies that signing in with a valid email and wrong password shows a visible invalid-credentials error and stays on the login page.",
+    "category": "Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"admin@youruniversity.edu\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"wrong-password-123\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Invalid\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Empty email prevents successful sign in",
+    "description": "Verifies that attempting to sign in with an empty email does not log the user in and shows a visible validation or error state.",
+    "category": "Authentication",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"email\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Empty password prevents successful sign in",
+    "description": "Verifies that attempting to sign in with an empty password does not log the user in and shows a visible validation or error state.",
+    "category": "Authentication",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"password\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Logout redirects to login",
+    "description": "Verifies that a logged-in admin can log out and is redirected to the login page.",
+    "category": "Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Logout\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Logout\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "After logout, accessing dashboard redirects to login",
+    "description": "Verifies that after logging out, attempting to access the main dashboard does not allow entry and results in the login page.",
+    "category": "Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Logout\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/login\""
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Create a new user from Settings and see it listed",
+    "description": "Verifies an admin can create a user from the Settings page and the new user appears in the user list.",
+    "category": "User Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Settings\" in the main navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/settings\""
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Test User A\" into the new user name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"test.user.a+e2e@example.com\" into the new user email field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Create user\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"test.user.a+e2e@example.com\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "New user form shows validation error for invalid email",
+    "description": "Verifies invalid email input is blocked and a visible validation error is shown on the Settings user creation form.",
+    "category": "User Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Settings\" in the main navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/settings\""
+      },
+      {
+        "type": "action",
+        "description": "Fill \"Bad Email User\" into the new user name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"not-an-email\" into the new user email field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Create user\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"invalid email\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Assign a student to L1 from the dashboard and confirm the status change",
+    "description": "Verifies that using the L1 action on a specific student updates the student’s visible status to L1 on the main dashboard.",
+    "category": "Assign Students (L1 - L4)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a specific student row in the student list"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"L1\" button for that student"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"L1\" is visible in the selected student’s status/level column"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Assign a student to L4 from the dashboard and confirm the status change",
+    "description": "Verifies that using the L4 action on a specific student updates the student’s visible status to L4 on the main dashboard.",
+    "category": "Assign Students (L1 - L4)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a specific student row in the student list"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"L4\" button for that student"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"L4\" is visible in the selected student’s status/level column"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Click L2 without selecting a student and verify a validation message is shown",
+    "description": "Verifies that clicking L2 with no student selected shows a visible validation/selection error and does not perform an assignment.",
+    "category": "Assign Students (L1 - L4)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"L2\" button without selecting any student row"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Select a student\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "After assigning to L1, verify the selection state remains stable and the status remains L1",
+    "description": "Verifies the UI remains consistent after an L1 assignment (no immediate revert of visible status).",
+    "category": "Assign Students (L1 - L4)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a specific student row in the student list"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"L1\" button for that student"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"L1\" is visible in the selected student’s status/level column"
+      },
+      {
+        "type": "action",
+        "description": "Wait for 2 seconds"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"L1\" is visible in the selected student’s status/level column"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Assign to L4 for a student who is already selected and verify the status updates from a prior level",
+    "description": "Verifies that changing a selected student’s assignment to L4 updates the visible status accordingly (supports reassignment).",
+    "category": "Assign Students (L1 - L4)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a specific student row in the student list"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"L1\" button for that student"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"L1\" is visible in the selected student’s status/level column"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"L4\" button for that student"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"L4\" is visible in the selected student’s status/level column"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Attempt L2 assignment with no selection and verify the dashboard list remains visible and usable",
+    "description": "Verifies that the validation for missing selection does not break the dashboard list UI and the user can still select a student afterward.",
+    "category": "Assign Students (L1 - L4)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click the \"L2\" button without selecting any student row"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Select a student\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on a specific student row in the student list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"L1\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Assign a student to L1 and verify the assigned level indicator is visible in the student list row",
+    "description": "Verifies the student row shows a visible indicator (text/badge) of the assigned level after L1 assignment.",
+    "category": "Assign Students (L1 - L4)",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign in\" or \"Login\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click on a specific student row in the student list"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"L1\" button for that student"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"L1\" is visible within the same student row"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Filter student list by department and stage shows matching results",
+    "description": "Verifies that selecting a department and stage filters the dashboard list accordingly.",
+    "category": "Filter Data",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Select a department option (not blank) from the department dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select a stage option (not blank) from the stage dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No results found\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Filtering updates list when only department is selected",
+    "description": "Verifies that selecting only a department narrows results without requiring a stage selection.",
+    "category": "Filter Data",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Select a department option (not blank) from the department dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No results found\" is not visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"department dropdown\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Filtering updates list when only stage is selected",
+    "description": "Verifies that selecting only a stage narrows results without requiring a department selection.",
+    "category": "Filter Data",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Select a stage option (not blank) from the stage dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No results found\" is not visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"stage dropdown\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "No-results state when department with no students is selected",
+    "description": "Verifies that selecting a department with no matching students shows a no-results message.",
+    "category": "Filter Data",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Select a department option that is known to have no students from the department dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select a stage option (not blank) from the stage dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No results found\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Clearing department restores full student list",
+    "description": "Verifies that clearing the department filter returns the list to an unfiltered state.",
+    "category": "Filter Data",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Select a department option (not blank) from the department dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select the blank/default option from the department dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No results found\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Changing stage after selecting department re-filters results",
+    "description": "Verifies that changing the stage dropdown after a department is selected updates the visible results.",
+    "category": "Filter Data",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Select a department option (not blank) from the department dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select a stage option (not blank) from the stage dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select a different stage option (not blank) from the stage dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No results found\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Clearing stage after applying both filters removes stage constraint",
+    "description": "Verifies that clearing the stage filter removes the stage constraint while keeping department selection.",
+    "category": "Filter Data",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Select a department option (not blank) from the department dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select a stage option (not blank) from the stage dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Select the blank/default option from the stage dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"No results found\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "Export error shows a visible error message and retry guidance",
+    "description": "Verifies that when an export fails, the user is shown a clear error message and instructions to retry.",
+    "category": "Export Data",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click the export button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Export failed\" or \"Error\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Retry\" or \"Please try again\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Export button is visible and available on the dashboard for authenticated users",
+    "description": "Verifies that the export entry point is present on the main dashboard after login.",
+    "category": "Export Data",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"export button\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Export progress indicator appears only after starting export",
+    "description": "Verifies that the progress indicator is not shown by default and becomes visible after clicking export.",
+    "category": "Export Data",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Exporting\" or \"Progress\" is not visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the export button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Exporting\" or \"Progress\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC026",
+    "title": "Export error state remains on dashboard and allows user to attempt again",
+    "description": "Verifies that after an export error, the user stays on the dashboard and can re-initiate export from the same page.",
+    "category": "Export Data",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email/username field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Log in\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "action",
+        "description": "Click the export button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Export failed\" or \"Error\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the export button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Exporting\" or \"Progress\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC027",
+    "title": "Admin can sign in and land on the main dashboard",
+    "description": "Verifies an admin can log in using valid credentials and reach the authenticated dashboard.",
+    "category": "Student Lifecycle (Add student, Payments, Move rooms)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"Login\""
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Add Student\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC028",
+    "title": "Add a new student from the dashboard and see them in the main list",
+    "description": "Verifies creating a student via the Add Student form results in the student appearing in the dashboard list.",
+    "category": "Student Lifecycle (Add student, Payments, Move rooms)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Add Student\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Student\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Create Student\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Type \"TestSprite Student A\" into the student name field"
+      }
+    ]
+  },
+  {
+    "id": "TC029",
+    "title": "Complete student creation and verify the student is visible in the dashboard list",
+    "description": "Verifies saving the student form creates the student and returns to a state where the student is visible in the main list.",
+    "category": "Student Lifecycle (Add student, Payments, Move rooms)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Student\" button"
+      },
+      {
+        "type": "action",
+        "description": "Type \"TestSprite Student B\" into the student name field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"TestSprite Student B\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC030",
+    "title": "Prevent student creation when a required field is blank",
+    "description": "Verifies form validation blocks student creation and shows a visible validation error.",
+    "category": "Student Lifecycle (Add student, Payments, Move rooms)",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_USER}}\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Type \"{{LOGIN_PASSWORD}}\" into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Sign In\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Add Student\" button"
+      },
+      {
+        "type": "action",
+        "description": "Click the \"Save\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"required\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Create Student\" is visible"
+      }
+    ]
+  }
+]

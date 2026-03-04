@@ -1,0 +1,82 @@
+version: "2"
+type: frontend
+tech_stack:
+  - TypeScript
+  - Next.js 14
+  - Tailwind CSS
+  - Supabase
+routes:
+  - path: /
+    file: app/page.tsx
+    auth_required: true
+    description: Main dashboard and student assignment list
+  - path: /login
+    file: app/login/page.tsx
+    auth_required: false
+    description: User login page
+  - path: /list/[id]
+    file: app/list/[id]/page.tsx
+    auth_required: true
+    description: Specific list view
+  - path: /reports
+    file: app/reports/page.tsx
+    auth_required: true
+    description: Reports page
+  - path: /settings
+    file: app/settings/page.tsx
+    auth_required: true
+    description: Settings and user management
+features:
+  - name: Authentication
+    description: Login, logout, persistent sessions
+    files:
+      - app/login/page.tsx
+    entry_route: /login
+    user_interactions:
+      - Fill email input field
+      - Fill password input field
+      - Click Sign In button to submit
+      - See error on invalid credentials
+      - Logout functionality
+    api_calls: []
+    auth_required: false
+  - name: User Management
+    description: Create and delete users from the Settings page
+    files:
+      - app/settings/page.tsx
+    entry_route: /settings
+    user_interactions:
+      - Fill new user form
+      - Click create user
+      - Click delete user
+    api_calls: []
+    auth_required: true
+  - name: Assign Students
+    description: Assigning students to lists (L1, L2, L3, L4 buttons)
+    files:
+      - app/page.tsx
+    entry_route: /
+    user_interactions:
+      - Click L1, L2, L3, or L4 button for a student
+    api_calls: []
+    auth_required: true
+  - name: Filter Data
+    description: Filter data by department or stage
+    files:
+      - app/page.tsx
+    entry_route: /
+    user_interactions:
+      - Select department from dropdown
+      - Select stage from dropdown
+    api_calls: []
+    auth_required: true
+  - name: Export Data
+    description: Export lists and reports
+    files:
+      - app/page.tsx
+    entry_route: /
+    user_interactions:
+      - Click export button
+    api_calls: []
+    auth_required: true
+known_limitations: []
