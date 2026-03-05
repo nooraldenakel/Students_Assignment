@@ -87,6 +87,20 @@ interface AppState {
 
 let isInitializing = false;
 
+async function fetchAllRecords(table: string) {
+    let allData: any[] = [];
+    let from = 0;
+    const limit = 1000;
+    while (true) {
+        const { data, error } = await supabase.from(table).select('*').range(from, from + limit - 1);
+        if (error || !data) break;
+        allData.push(...data);
+        if (data.length < limit) break;
+        from += limit;
+    }
+    return { data: allData };
+}
+
 export const useStore = create<AppState>()(
     persist(
         (set, get) => ({
@@ -109,9 +123,9 @@ export const useStore = create<AppState>()(
 
                 // 1. Initial Fetch
                 const [usersRes, studentsRes, assignRes, settingsRes, deptRes] = await Promise.all([
-                    supabase.from('app_users').select('*'),
-                    supabase.from('students').select('*'),
-                    supabase.from('assignments').select('*'),
+                    fetchAllRecords('app_users'),
+                    fetchAllRecords('students'),
+                    fetchAllRecords('assignments'),
                     supabase.from('settings').select('*').eq('id', 1).single(),
                     supabase.from('departments').select('*').order('name')
                 ]);

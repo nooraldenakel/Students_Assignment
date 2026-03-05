@@ -21,11 +21,11 @@ export default function RootLayout({
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
                 <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
             </head>
-            <body className="font-lexend">
+            <body className="font-lexend bg-slate-50 text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
                 <StoreProvider>
-                    <div className="flex h-screen bg-background overflow-hidden">
+                    <div className="flex h-screen overflow-hidden">
                         <Sidebar />
-                        <main className="flex-1 overflow-y-auto w-full p-6">
+                        <main className="flex-1 overflow-y-auto w-full p-6 lg:p-8">
                             {children}
                         </main>
                     </div>

@@ -9,6 +9,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     Cell as RechartsCell
 } from 'recharts';
+import Dropdown from '../../components/Dropdown';
 
 export default function ReportsPage() {
     const router = useRouter();
@@ -174,8 +175,10 @@ export default function ReportsPage() {
         <div className="space-y-6 max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground">Reports & Statistics</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Professional analytics for student assignments</p>
+                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight">Reports & Statistics</h1>
+                    <p className="text-sm font-medium text-slate-500 mt-2">
+                        Comprehensive overview of system data
+                    </p>
                 </div>
                 <button
                     onClick={exportStats}
@@ -260,29 +263,30 @@ export default function ReportsPage() {
                 <div className="flex flex-col md:flex-row gap-6 items-end">
                     <div className="w-full md:w-64">
                         <label className="block text-sm font-semibold text-muted-foreground mb-2 px-1">Calculate By</label>
-                        <select
-                            className="w-full px-4 py-2.5 rounded-xl border border-border outline-none bg-white font-medium"
+                        <Dropdown
                             value={calcType}
-                            onChange={(e) => {
-                                setCalcType(e.target.value as 'List' | 'Department');
-                                setCalcSelection(e.target.value === 'List' ? 'L1' : departments[0] || '');
+                            onChange={(val: string) => {
+                                setCalcType(val as 'List' | 'Department');
+                                setCalcSelection(val === 'List' ? 'L1' : departments[0] || '');
                             }}
-                        >
-                            <option value="List">List (L1-L4)</option>
-                            <option value="Department">Department</option>
-                        </select>
+                            options={[
+                                { label: 'List (L1-L4)', value: 'List' },
+                                { label: 'Department', value: 'Department' }
+                            ]}
+                        />
                     </div>
                     <div className="w-full md:w-64">
                         <label className="block text-sm font-semibold text-muted-foreground mb-2 px-1">Selection</label>
-                        <select className="w-full px-4 py-2.5 rounded-xl border border-border outline-none bg-white font-medium" value={calcSelection} onChange={(e) => setCalcSelection(e.target.value)}>
-                            {calcType === 'List' ? (
-                                <>
-                                    <option value="L1">L1</option><option value="L2">L2</option><option value="L3">L3</option><option value="L4">L4</option>
-                                </>
-                            ) : (
-                                departments.map((dept: string) => <option key={dept} value={dept}>{dept}</option>)
-                            )}
-                        </select>
+                        <Dropdown
+                            value={calcSelection}
+                            onChange={(val: string) => setCalcSelection(val)}
+                            options={calcType === 'List' ? [
+                                { label: 'L1', value: 'L1' },
+                                { label: 'L2', value: 'L2' },
+                                { label: 'L3', value: 'L3' },
+                                { label: 'L4', value: 'L4' }
+                            ] : departments.map((dept: string) => ({ label: dept, value: dept }))}
+                        />
                     </div>
                     <div className="bg-primary/5 px-8 py-2.5 rounded-xl border border-primary/10 flex items-center justify-center min-w-[140px] h-[48px]">
                         <span className="font-extrabold text-xl text-primary">
