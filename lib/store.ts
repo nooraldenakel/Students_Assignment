@@ -87,11 +87,13 @@ interface AppState {
 
 let isInitializing = false;
 
-async function fetchAllRecords(table: string) {
+async function fetchAllRecords(table: string, filterConfig?: { column: string, inValues: string[] }) {
     // 1. Get total count
-    const { count, error: countError } = await supabase
-        .from(table)
-        .select('*', { count: 'exact', head: true });
+    let countQuery = supabase.from(table).select('*', { count: 'exact', head: true });
+    if (filterConfig && filterConfig.inValues.length > 0) {
+        countQuery = countQuery.in(filterConfig.column, filterConfig.inValues);
+    }
+    const { count, error: countError } = await countQuery;
 
     if (countError || count === null) {
         // Fallback to sequential if count fails
@@ -99,7 +101,11 @@ async function fetchAllRecords(table: string) {
         let from = 0;
         const limit = 1000;
         while (true) {
-            const { data, error } = await supabase.from(table).select('*').range(from, from + limit - 1);
+            let query = supabase.from(table).select('*').range(from, from + limit - 1);
+            if (filterConfig && filterConfig.inValues.length > 0) {
+                query = query.in(filterConfig.column, filterConfig.inValues);
+            }
+            const { data, error } = await query;
             if (error || !data) break;
             allData.push(...data);
             if (data.length < limit) break;
@@ -118,7 +124,11 @@ async function fetchAllRecords(table: string) {
     for (let i = 0; i < totalPages; i++) {
         const from = i * limit;
         const to = from + limit - 1;
-        promises.push(supabase.from(table).select('*').range(from, to));
+        let query = supabase.from(table).select('*').range(from, to);
+        if (filterConfig && filterConfig.inValues.length > 0) {
+            query = query.in(filterConfig.column, filterConfig.inValues);
+        }
+        promises.push(query);
     }
 
     const results = await Promise.all(promises);
@@ -148,14 +158,45 @@ export const useStore = create<AppState>()(
                 if (get().isInitialized || isInitializing) return;
                 isInitializing = true;
 
+                const currentUser = get().currentUser;
+                const isViewer = currentUser?.role === 'Viewer';
+                const allowedDepartments = currentUser?.allowedDepartments || [];
+
+                // Define filter for users (viewers don't need all users)
+                const usersPromise = isViewer
+                    ? Promise.resolve({ data: [] }) // Viewers don't need user list
+                    : fetchAllRecords('app_users');
+
                 // 1. Initial Fetch
-                const [usersRes, studentsRes, assignRes, settingsRes, deptRes] = await Promise.all([
-                    fetchAllRecords('app_users'),
-                    fetchAllRecords('students'),
+                // Fetch assignments first so we can filter students by assigned ones for Viewers
+                const [usersRes, assignRes, settingsRes, deptRes] = await Promise.all([
+                    usersPromise,
                     fetchAllRecords('assignments'),
                     supabase.from('settings').select('*').eq('id', 1).single(),
                     supabase.from('departments').select('*').order('name')
                 ]);
+
+                let studentsRes: { data: any[] };
+                if (isViewer) {
+                    const assignedStudentIds = Array.from(new Set((assignRes.data || []).map(a => a.student_id)));
+                    if (assignedStudentIds.length === 0 || allowedDepartments.length === 0) {
+                        studentsRes = { data: [] };
+                    } else {
+                        const BATCH_SIZE = 500;
+                        const promises = [];
+                        for (let i = 0; i < assignedStudentIds.length; i += BATCH_SIZE) {
+                            const chunk = assignedStudentIds.slice(i, i + BATCH_SIZE);
+                            const query = supabase.from('students').select('*')
+                                .in('id', chunk)
+                                .in('department', allowedDepartments);
+                            promises.push(query);
+                        }
+                        const results = await Promise.all(promises);
+                        studentsRes = { data: results.flatMap(r => r.data || []) };
+                    }
+                } else {
+                    studentsRes = await fetchAllRecords('students');
+                }
 
                 if (deptRes.data) {
                     set({ departments: deptRes.data.map(d => d.name) });
@@ -218,6 +259,18 @@ export const useStore = create<AppState>()(
 
                 channel.on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, (payload) => {
                     const s = payload.new as any;
+
+                    // Filter incoming events for viewers
+                    const currentUser = get().currentUser;
+                    const isViewer = currentUser?.role === 'Viewer';
+                    const allowedDepartments = currentUser?.allowedDepartments || [];
+
+                    if (isViewer && payload.eventType !== 'DELETE') {
+                        if (!allowedDepartments.includes(s.department)) {
+                            return; // Ignore updates for departments we don't care about
+                        }
+                    }
+
                     if (payload.eventType === 'INSERT') {
                         set(state => ({ students: [...state.students, { id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: {} }] }));
                     } else if (payload.eventType === 'UPDATE') {
