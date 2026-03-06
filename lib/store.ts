@@ -88,16 +88,43 @@ interface AppState {
 let isInitializing = false;
 
 async function fetchAllRecords(table: string) {
-    let allData: any[] = [];
-    let from = 0;
-    const limit = 1000;
-    while (true) {
-        const { data, error } = await supabase.from(table).select('*').range(from, from + limit - 1);
-        if (error || !data) break;
-        allData.push(...data);
-        if (data.length < limit) break;
-        from += limit;
+    // 1. Get total count
+    const { count, error: countError } = await supabase
+        .from(table)
+        .select('*', { count: 'exact', head: true });
+
+    if (countError || count === null) {
+        // Fallback to sequential if count fails
+        let allData: any[] = [];
+        let from = 0;
+        const limit = 1000;
+        while (true) {
+            const { data, error } = await supabase.from(table).select('*').range(from, from + limit - 1);
+            if (error || !data) break;
+            allData.push(...data);
+            if (data.length < limit) break;
+            from += limit;
+        }
+        return { data: allData };
     }
+
+    if (count === 0) return { data: [] };
+
+    // 2. Fetch all pages in parallel
+    const limit = 1000;
+    const totalPages = Math.ceil(count / limit);
+    const promises = [];
+
+    for (let i = 0; i < totalPages; i++) {
+        const from = i * limit;
+        const to = from + limit - 1;
+        promises.push(supabase.from(table).select('*').range(from, to));
+    }
+
+    const results = await Promise.all(promises);
+
+    // 3. Combine results
+    const allData = results.flatMap(res => res.data || []);
     return { data: allData };
 }
 
@@ -254,7 +281,7 @@ export const useStore = create<AppState>()(
             },
 
             login: (email, password) => {
-                const user = get().users.find(u => u.email === email && u.password === password);
+                const user = get().users.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase() && u.password === password);
                 if (user) {
                     set({ currentUser: user });
                     return true;

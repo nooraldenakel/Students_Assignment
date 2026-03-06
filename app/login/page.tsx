@@ -150,18 +150,10 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    <div className="mt-12 text-center space-y-3">
+                    <div className="mt-12 text-center">
                         <p className="text-xs font-semibold text-slate-400">
                             Strictly for authorized institutional personnel.
                         </p>
-                        <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-500">
-                            <span>Design and Developed by Alayan University</span>
-                            <img
-                                src="https://play-lh.googleusercontent.com/ohAHv0XsLoev0RZgIy9jFwuLAxRthpwfCGZVzjE6-ZNI11m0qptxBFDpUEOvKvlL-_Lg4bojhl-MgPZZGYdIArk"
-                                alt="Alayan University Logo"
-                                className="w-5 h-5 object-contain opacity-80 rounded-sm"
-                            />
-                        </div>
                     </div>
                 </div>
             </div>
