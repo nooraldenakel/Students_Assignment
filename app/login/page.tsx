@@ -22,11 +22,11 @@ export default function LoginPage() {
     const showAlert = useStore((state) => state.showAlert);
     const router = useRouter();
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
 
-        const success = login(email, password);
+        const success = await login(email, password);
 
         if (success) {
             router.push('/');

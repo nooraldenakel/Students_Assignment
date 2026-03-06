@@ -51,8 +51,8 @@ interface AppState {
     setHydrated: () => void;
     initRealtime: () => Promise<void>;
 
-    login: (email: string, password: string) => boolean;
-    logout: () => void;
+    login: (email: string, password: string) => Promise<boolean>;
+    logout: () => Promise<void>;
 
     addUser: (name: string, email: string, password: string, role: Role, allowedDepartments?: Department[]) => Promise<void>;
     removeUser: (userId: string) => Promise<void>;
@@ -280,15 +280,33 @@ export const useStore = create<AppState>()(
                 channel.subscribe();
             },
 
-            login: (email, password) => {
-                const user = get().users.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase() && u.password === password);
-                if (user) {
-                    set({ currentUser: user });
+            login: async (email, password) => {
+                const { data, error } = await supabase.from('app_users').select('*').ilike('email', email.trim()).single();
+                if (data && data.password === password) {
+                    const parsedUser = {
+                        id: data.id,
+                        name: data.name,
+                        email: data.email,
+                        password: data.password,
+                        role: data.role as Role,
+                        allowedDepartments: data.allowed_departments as Department[] | undefined
+                    };
+                    set({ currentUser: parsedUser });
+                    get().initRealtime();
                     return true;
                 }
                 return false;
             },
-            logout: () => set({ currentUser: null }),
+            logout: async () => {
+                isInitializing = false;
+                await supabase.removeAllChannels();
+                set({
+                    currentUser: null,
+                    isInitialized: false,
+                    students: [],
+                    users: []
+                });
+            },
 
             addUser: async (name, email, password, role, allowedDepartments) => {
                 // Optimistic UUID generation
