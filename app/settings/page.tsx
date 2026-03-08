@@ -347,8 +347,8 @@ export default function SettingsPage() {
                                     <div key={u.id} className={`flex items-center justify-between p-4 border rounded-2xl bg-white transition-all hover:border-gray-300 ${u.id === currentUser.id ? 'border-gray-200' : 'border-gray-100'}`}>
                                         <div className="flex items-center gap-4">
                                             <div className={`w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-sm ${u.role === 'Admin' ? 'bg-red-50 text-red-600' :
-                                                    u.role === 'Operator' ? 'bg-blue-50 text-blue-600' :
-                                                        'bg-gray-100 text-gray-500'
+                                                u.role === 'Operator' ? 'bg-blue-50 text-blue-600' :
+                                                    'bg-gray-100 text-gray-500'
                                                 }`}>
                                                 {u.id === currentUser.id ? 'SA' : (u.role === 'Operator' ? 'MQ' : (u.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'U'))}
                                             </div>
@@ -357,8 +357,8 @@ export default function SettingsPage() {
                                                 <div className="flex items-center gap-2 mb-0.5">
                                                     <p className="font-bold text-[#1a2b4b] text-[14px] uppercase tracking-tight">{u.name}</p>
                                                     <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest ${u.role === 'Admin' ? 'bg-red-50 text-red-600' :
-                                                            u.role === 'Operator' ? 'bg-blue-50 text-blue-600' :
-                                                                'bg-gray-100 text-gray-500'
+                                                        u.role === 'Operator' ? 'bg-blue-50 text-blue-600' :
+                                                            'bg-gray-100 text-gray-500'
                                                         }`}>
                                                         {u.role}
                                                     </span>
@@ -397,9 +397,18 @@ export default function SettingsPage() {
                                                             }}
                                                         >
                                                             <option value="">Toggle Department</option>
-                                                            {departments.map(d => (
-                                                                <option key={d} value={d}>{(u.allowedDepartments || []).includes(d) ? `Remove ${d}` : `Add ${d}`}</option>
-                                                            ))}
+                                                            {departments.map(d => {
+                                                                const isSelected = (u.allowedDepartments || []).includes(d);
+                                                                return (
+                                                                    <option
+                                                                        key={d}
+                                                                        value={d}
+                                                                        style={isSelected ? { backgroundColor: '#fee2e2', color: '#ef4444' } : undefined}
+                                                                    >
+                                                                        {d}
+                                                                    </option>
+                                                                );
+                                                            })}
                                                         </select>
                                                     </div>
                                                 </div>

@@ -150,16 +150,17 @@ export default function ReportsPage() {
 
             return departments.map((dept: string) => {
                 const count = inList.filter(s => s.department === dept).length;
-                return { name: dept, count, percent: ((count / totalInList) * 100).toFixed(1) };
+                const totalStudentsInDept = students.filter(s => s.department === dept).length;
+                return { name: dept, count, percent: totalStudentsInDept > 0 ? ((count / totalStudentsInDept) * 100).toFixed(1) : "0.0" };
             }).filter(d => parseFloat(d.percent) > 0);
         } else {
             const inDept = students.filter(s => s.department === calcSelection);
-            const totalAssignedInDept = inDept.filter(s => Object.keys(s.assignments).length > 0).length;
-            if (totalAssignedInDept === 0) return [];
+            const totalInDept = inDept.length;
+            if (totalInDept === 0) return [];
 
             return (['L1', 'L2', 'L3', 'L4'] as const).map(list => {
                 const count = inDept.filter(s => !!s.assignments[list]).length;
-                return { name: list, count, percent: ((count / totalAssignedInDept) * 100).toFixed(1) };
+                return { name: list, count, percent: ((count / totalInDept) * 100).toFixed(1) };
             });
         }
     }, [students, calcType, calcSelection]);

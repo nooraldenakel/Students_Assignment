@@ -50,6 +50,7 @@ interface AppState {
 
     setHydrated: () => void;
     initRealtime: () => Promise<void>;
+    refreshViewerData: () => Promise<void>;
 
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => Promise<void>;
@@ -251,7 +252,22 @@ export const useStore = create<AppState>()(
                             return { users: [...state.users, { id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined }] };
                         });
                     } else if (payload.eventType === 'UPDATE') {
-                        set(state => ({ users: state.users.map(user => user.id === u.id ? { id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined } : user) }));
+                        const updatedUser = { id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined };
+                        set(state => ({ users: state.users.map(user => user.id === u.id ? updatedUser : user) }));
+
+                        // If the updated user is the currently logged in user, update the current user object
+                        const currentUser = get().currentUser;
+                        if (currentUser && currentUser.id === u.id) {
+                            set({ currentUser: updatedUser });
+                            // If the user's role changed to something else, or if their departments changed, we might need to refresh their data directly
+                            if (currentUser.role === 'Viewer' && updatedUser.role === 'Viewer') {
+                                // If they are still a viewer, their allowed departments might have changed. Re-fetch.
+                                get().refreshViewerData();
+                            } else if (currentUser.role !== updatedUser.role) {
+                                // If role changed entirely, fully re-init
+                                get().initRealtime();
+                            }
+                        }
                     } else if (payload.eventType === 'DELETE') {
                         set(state => ({ users: state.users.filter(user => user.id !== payload.old.id) }));
                     }
@@ -280,9 +296,49 @@ export const useStore = create<AppState>()(
                     }
                 });
 
-                channel.on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, (payload) => {
+                channel.on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, async (payload) => {
                     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                         const newA = payload.new as any;
+                        const currentState = get();
+                        let studentExists = currentState.students.some(st => st.id === newA.student_id);
+
+                        // If student doesn't exist in our store, we might need to fetch them (especially for Viewer role)
+                        if (!studentExists) {
+                            const { data: studentData, error } = await supabase.from('students').select('*').eq('id', newA.student_id).single();
+
+                            if (studentData && !error) {
+                                const currentUser = get().currentUser;
+                                const isViewer = currentUser?.role === 'Viewer';
+                                const allowedDepartments = currentUser?.allowedDepartments || [];
+
+                                // If viewer and department is allowed, or if not viewer, add the student
+                                if (!isViewer || allowedDepartments.includes(studentData.department)) {
+                                    set(state => {
+                                        // Double check they weren't added while we were fetching
+                                        if (state.students.some(st => st.id === newA.student_id)) return state;
+
+                                        const newStudent: Student = {
+                                            id: studentData.id,
+                                            name: studentData.name,
+                                            stage: studentData.stage,
+                                            department: studentData.department as Department,
+                                            studyType: studentData.study_type as StudyType,
+                                            assignments: {
+                                                [newA.list_id]: {
+                                                    date: newA.assigned_date,
+                                                    assignedByUserId: newA.assigned_by_user_id,
+                                                    assignedByUserName: newA.assigned_by_user_name
+                                                }
+                                            }
+                                        };
+                                        return { students: [...state.students, newStudent] };
+                                    });
+                                    studentExists = true; // Mark as existing so the map below doesn't need to run but it's fine if it does (it'll just update it to the exact same thing)
+                                }
+                            }
+                        }
+
+                        // If the student exists or was just added above, update their assignments
                         set(state => {
                             return {
                                 students: state.students.map(st => {
@@ -306,16 +362,31 @@ export const useStore = create<AppState>()(
                     } else if (payload.eventType === 'DELETE') {
                         const oldA = payload.old as any;
                         set(state => {
-                            return {
-                                students: state.students.map(st => {
-                                    if (st.id === oldA.student_id) {
-                                        const newAssignments = { ...st.assignments };
-                                        delete (newAssignments as any)[oldA.list_id];
-                                        return { ...st, assignments: newAssignments };
-                                    }
-                                    return st;
-                                })
-                            };
+                            const currentUser = state.currentUser;
+                            const isViewer = currentUser?.role === 'Viewer';
+
+                            const newStudents = state.students.map(st => {
+                                if (st.id === oldA.student_id) {
+                                    const newAssignments = { ...st.assignments };
+                                    delete (newAssignments as any)[oldA.list_id];
+                                    return { ...st, assignments: newAssignments };
+                                }
+                                return st;
+                            });
+
+                            // If viewer, filter out students that no longer have any assignments
+                            if (isViewer) {
+                                return {
+                                    students: newStudents.filter(st => {
+                                        if (st.id === oldA.student_id) {
+                                            return Object.keys(st.assignments).length > 0;
+                                        }
+                                        return true; // Keep others as is
+                                    })
+                                };
+                            }
+
+                            return { students: newStudents };
                         });
                     }
                 });
@@ -331,6 +402,52 @@ export const useStore = create<AppState>()(
                 });
 
                 channel.subscribe();
+            },
+
+            refreshViewerData: async () => {
+                const currentUser = get().currentUser;
+                if (!currentUser || currentUser.role !== 'Viewer') return;
+
+                const allowedDepartments = currentUser.allowedDepartments || [];
+
+                // Fetch assignments first
+                const assignRes = await fetchAllRecords('assignments');
+
+                let studentsRes: { data: any[] };
+                const assignedStudentIds = Array.from(new Set((assignRes.data || []).map(a => a.student_id)));
+                if (assignedStudentIds.length === 0 || allowedDepartments.length === 0) {
+                    studentsRes = { data: [] };
+                } else {
+                    const BATCH_SIZE = 500;
+                    const promises = [];
+                    for (let i = 0; i < assignedStudentIds.length; i += BATCH_SIZE) {
+                        const chunk = assignedStudentIds.slice(i, i + BATCH_SIZE);
+                        const query = supabase.from('students').select('*')
+                            .in('id', chunk)
+                            .in('department', allowedDepartments);
+                        promises.push(query);
+                    }
+                    const results = await Promise.all(promises);
+                    studentsRes = { data: results.flatMap(r => r.data || []) };
+                }
+
+                if (studentsRes.data && assignRes.data) {
+                    const parsedStudents: Student[] = studentsRes.data.map(s => {
+                        const sAssigns = assignRes.data.filter(a => a.student_id === s.id);
+                        const assignmentsObj: any = {};
+                        sAssigns.forEach(a => {
+                            assignmentsObj[a.list_id] = {
+                                date: a.assigned_date,
+                                assignedByUserId: a.assigned_by_user_id,
+                                assignedByUserName: a.assigned_by_user_name
+                            };
+                        });
+                        return {
+                            id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: assignmentsObj
+                        };
+                    });
+                    set({ students: parsedStudents });
+                }
             },
 
             login: async (email, password) => {
