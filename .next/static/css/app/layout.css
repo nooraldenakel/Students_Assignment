@@ -607,6 +607,9 @@ video {
 .top-full {
   top: 100%;
 }
+.left-2\.5 {
+  left: 0.625rem;
+}
 .z-10 {
   z-index: 10;
 }

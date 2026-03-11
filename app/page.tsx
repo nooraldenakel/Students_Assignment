@@ -167,6 +167,7 @@ export default function MainPage() {
                     <div className="w-[180px] sm:w-[220px]">
                         <Dropdown
                             value={deptFilter}
+                            searchable={true}
                             onChange={(val) => setDeptFilter(val as any)}
                             options={[
                                 { label: 'All Departments', value: 'All' },

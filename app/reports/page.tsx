@@ -266,6 +266,7 @@ export default function ReportsPage() {
                         <label className="block text-sm font-semibold text-muted-foreground mb-2 px-1">Calculate By</label>
                         <Dropdown
                             value={calcType}
+                            placement={groupedCalcData.length === 0 ? 'top' : 'bottom'}
                             onChange={(val: string) => {
                                 setCalcType(val as 'List' | 'Department');
                                 setCalcSelection(val === 'List' ? 'L1' : departments[0] || '');
@@ -280,6 +281,8 @@ export default function ReportsPage() {
                         <label className="block text-sm font-semibold text-muted-foreground mb-2 px-1">Selection</label>
                         <Dropdown
                             value={calcSelection}
+                            placement={groupedCalcData.length === 0 ? 'top' : 'bottom'}
+                            searchable={calcType === 'Department'}
                             onChange={(val: string) => setCalcSelection(val)}
                             options={calcType === 'List' ? [
                                 { label: 'L1', value: 'L1' },

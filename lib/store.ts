@@ -8,7 +8,6 @@ export interface User {
     id: string;
     name: string;
     email: string;
-    password?: string;
     role: Role;
     allowedDepartments?: Department[];
 }
@@ -205,7 +204,7 @@ export const useStore = create<AppState>()(
 
                 if (usersRes.data) {
                     const parsedUsers = usersRes.data.map(u => ({
-                        id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role,
+                        id: u.id, name: u.name, email: u.email, role: u.role as Role,
                         allowedDepartments: u.allowed_departments as Department[] | undefined
                     }));
                     set({ users: parsedUsers });
@@ -249,10 +248,10 @@ export const useStore = create<AppState>()(
                         set(state => {
                             // Check if already exists to prevent duplicate optimistic updates
                             if (state.users.some(existing => existing.id === u.id)) return state;
-                            return { users: [...state.users, { id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined }] };
+                            return { users: [...state.users, { id: u.id, name: u.name, email: u.email, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined }] };
                         });
                     } else if (payload.eventType === 'UPDATE') {
-                        const updatedUser = { id: u.id, name: u.name, email: u.email, password: u.password, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined };
+                        const updatedUser = { id: u.id, name: u.name, email: u.email, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined };
                         set(state => ({ users: state.users.map(user => user.id === u.id ? updatedUser : user) }));
 
                         // If the updated user is the currently logged in user, update the current user object
@@ -451,13 +450,19 @@ export const useStore = create<AppState>()(
             },
 
             login: async (email, password) => {
-                const { data, error } = await supabase.from('app_users').select('*').ilike('email', email.trim()).single();
-                if (data && data.password === password) {
+                const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+                    email: email.trim(),
+                    password: password
+                });
+
+                if (authError || !authData.user) return false;
+
+                const { data, error } = await supabase.from('app_users').select('*').eq('id', authData.user.id).single();
+                if (data && !error) {
                     const parsedUser = {
                         id: data.id,
                         name: data.name,
                         email: data.email,
-                        password: data.password,
                         role: data.role as Role,
                         allowedDepartments: data.allowed_departments as Department[] | undefined
                     };
@@ -470,6 +475,7 @@ export const useStore = create<AppState>()(
             logout: async () => {
                 isInitializing = false;
                 await supabase.removeAllChannels();
+                await supabase.auth.signOut();
                 set({
                     currentUser: null,
                     isInitialized: false,
@@ -479,22 +485,30 @@ export const useStore = create<AppState>()(
             },
 
             addUser: async (name, email, password, role, allowedDepartments) => {
-                // Optimistic UUID generation
-                const tempId = crypto.randomUUID();
-                set(state => ({
-                    users: [...state.users, { id: tempId, name, email, password, role, allowedDepartments }]
-                }));
-                const { data, error } = await supabase.from('app_users').insert({ name, email, password, role, allowed_departments: allowedDepartments }).select().single();
-                if (data && !error) {
-                    // Update temp ID to real ID silently
+                const { data: newUserId, error } = await supabase.rpc('create_app_user', {
+                    p_email: email,
+                    p_password: password,
+                    p_name: name,
+                    p_role: role,
+                    p_allowed_departments: allowedDepartments || []
+                });
+
+                if (error) {
+                    get().showAlert('Error', error.message || 'Failed to create user', 'error');
+                } else if (!get().users.some((u) => u.id === newUserId)) {
+                    // In case realtime is slow, pessimistically add it 
                     set(state => ({
-                        users: state.users.map(u => u.id === tempId ? { ...u, id: data.id } : u)
+                        users: [...state.users, { id: newUserId, name, email, role, allowedDepartments }]
                     }));
                 }
             },
             removeUser: async (userId) => {
-                set(state => ({ users: state.users.filter(u => u.id !== userId) }));
-                await supabase.from('app_users').delete().eq('id', userId);
+                const { error } = await supabase.rpc('delete_app_user', { p_user_id: userId });
+                if (error) {
+                    get().showAlert('Error', error.message || 'Failed to delete user', 'error');
+                } else {
+                    set(state => ({ users: state.users.filter(u => u.id !== userId) }));
+                }
             },
             updateUserRole: async (userId, newRole) => {
                 set(state => ({ users: state.users.map(u => u.id === userId ? { ...u, role: newRole } : u) }));
