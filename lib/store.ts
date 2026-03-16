@@ -13,7 +13,7 @@ export interface User {
 }
 
 export type Department = string;
-export type StudyType = 'Morning' | 'Evening';
+export type StudyType = 'صباحي' | 'مسائي';
 
 export interface AssignmentMeta {
     date: string;

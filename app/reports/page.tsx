@@ -105,7 +105,7 @@ export default function ReportsPage() {
                     return {
                         'اسم الطالب': s.name,
                         'القسم': s.department,
-                        'نوع الدراسة': s.studyType === 'Morning' ? 'صباحي' : 'مسائي',
+                        'نوع الدراسة': s.studyType,
                         'المرحلة الدراسية': s.stage,
                         'تاريخ المباشرة': new Date(meta.date).toLocaleDateString(),
                         'مباشر بواسطة': meta.assignedByUserName
@@ -124,7 +124,7 @@ export default function ReportsPage() {
                     const assignedLists = Object.keys(s.assignments).map(l => l.replace('L', 'Course ')).join(', ') || 'غير مباشر';
                     return {
                         'اسم الطالب': s.name,
-                        'نوع الدراسة': s.studyType === 'Morning' ? 'صباحي' : 'مسائي',
+                        'نوع الدراسة': s.studyType,
                         'المرحلة الدراسية': s.stage,
                         'المباشرات': assignedLists
                     };

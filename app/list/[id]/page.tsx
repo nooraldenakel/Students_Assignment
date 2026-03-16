@@ -81,7 +81,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
                 'الاسم': s.name,
                 'المرحلة الدراسية': s.stage,
                 'القسم': s.department,
-                'نوع الدراسة': s.studyType === 'Morning' ? 'صباحي' : 'مسائي',
+                'نوع الدراسة': s.studyType,
                 'تاريخ المباشرة': meta ? new Date(meta.date).toLocaleDateString() : '-',
                 'مباشر بواسطة': meta ? meta.assignedByUserName : '-'
             };
@@ -195,9 +195,9 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                         <td className="p-4 text-center text-muted-foreground">{student.stage.replace('Stage', 'المرحلة')}</td>
                                         <td className="p-4 text-center text-muted-foreground">{student.department}</td>
                                         <td className="p-4 text-center">
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${student.studyType === 'Morning' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${student.studyType === 'صباحي' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
                                                 }`}>
-                                                {student.studyType === 'Morning' ? 'صباحي' : 'مسائي'}
+                                                {student.studyType}
                                             </span>
                                         </td>
                                         <td className="p-4 text-center text-muted-foreground">

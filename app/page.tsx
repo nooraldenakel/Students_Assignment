@@ -107,7 +107,7 @@ export default function MainPage() {
             'الاسم': s.name,
             'المرحلة الدراسية': s.stage,
             'القسم': s.department,
-            'نوع الدراسة': s.studyType === 'Morning' ? 'صباحي' : 'مسائي'
+            'نوع الدراسة': s.studyType
         }));
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
@@ -182,8 +182,8 @@ export default function MainPage() {
                             onChange={(val) => setTypeFilter(val as any)}
                             options={[
                                 { label: 'جميع الأنواع', value: 'All' },
-                                { label: 'صباحي', value: 'Morning' },
-                                { label: 'مسائي', value: 'Evening' }
+                                { label: 'صباحي', value: 'صباحي' },
+                                { label: 'مسائي', value: 'مسائي' }
                             ]}
                         />
                     </div>
@@ -292,8 +292,8 @@ export default function MainPage() {
                                         )}
                                         <td className="p-4 text-center">
                                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight shadow-sm
-                                            ${student.studyType === 'Morning' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-purple-50 text-purple-600 border border-purple-100'}`}>
-                                                {student.studyType === 'Morning' ? 'صباحي' : 'مسائي'}
+                                            ${student.studyType === 'صباحي' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-purple-50 text-purple-600 border border-purple-100'}`}>
+                                                {student.studyType}
                                             </span>
                                         </td>
                                         <td className="p-4">
