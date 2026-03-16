@@ -61,9 +61,9 @@ export default function ReportsPage() {
         // 1. Summary Sheet
         const summaryData: any[] = [];
 
-        summaryData.push({ Category: 'OVERALL', Metric: 'Total Students', Value: stats.total });
-        summaryData.push({ Category: 'OVERALL', Metric: 'Assigned Students (Any List)', Value: stats.assigned });
-        summaryData.push({ Category: 'OVERALL', Metric: 'Unassigned Students', Value: stats.total - stats.assigned });
+        summaryData.push({ Category: 'OVERALL', Metric: 'إجمالي الطلاب', Value: stats.total });
+        summaryData.push({ Category: 'OVERALL', Metric: 'الطلاب المباشرين (أي Course)', Value: stats.assigned });
+        summaryData.push({ Category: 'OVERALL', Metric: 'الطلاب غير المباشرين', Value: stats.total - stats.assigned });
         summaryData.push({ Category: '', Metric: '', Value: '' });
 
         // List Stats
@@ -72,9 +72,9 @@ export default function ReportsPage() {
             const notAssignedToList = stats.total - assignedToList;
             const percentage = stats.total > 0 ? ((assignedToList / stats.total) * 100).toFixed(1) + '%' : '0%';
 
-            summaryData.push({ Category: `LIST ${list}`, Metric: 'Assigned', Value: assignedToList });
-            summaryData.push({ Category: `LIST ${list}`, Metric: 'Not Assigned', Value: notAssignedToList });
-            summaryData.push({ Category: `LIST ${list}`, Metric: 'Percentage Assigned', Value: percentage });
+            summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'المباشرين', Value: assignedToList });
+            summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'غير المباشرين', Value: notAssignedToList });
+            summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'نسبة المباشرة', Value: percentage });
             summaryData.push({ Category: '', Metric: '', Value: '' });
         });
 
@@ -86,10 +86,10 @@ export default function ReportsPage() {
             const notAssignedInDept = totalInDept - assignedInDept;
             const percentage = totalInDept > 0 ? ((assignedInDept / totalInDept) * 100).toFixed(1) + '%' : '0%';
 
-            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'Total Students', Value: totalInDept });
-            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'Assigned', Value: assignedInDept });
-            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'Not Assigned', Value: notAssignedInDept });
-            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'Percentage Assigned', Value: percentage });
+            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'إجمالي الطلاب', Value: totalInDept });
+            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'المباشرين', Value: assignedInDept });
+            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'غير المباشرين', Value: notAssignedInDept });
+            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'نسبة المباشرة', Value: percentage });
             summaryData.push({ Category: '', Metric: '', Value: '' });
         });
 
@@ -103,16 +103,16 @@ export default function ReportsPage() {
                 const listData = listStudents.map(s => {
                     const meta = s.assignments[list]!;
                     return {
-                        'Student Name': s.name,
-                        'Department': s.department,
-                        'Study Type': s.studyType,
-                        'Stage': s.stage,
-                        'Assigned Date': new Date(meta.date).toLocaleDateString(),
-                        'Assigned By': meta.assignedByUserName
+                        'اسم الطالب': s.name,
+                        'القسم': s.department,
+                        'نوع الدراسة': s.studyType === 'Morning' ? 'صباحي' : 'مسائي',
+                        'المرحلة الدراسية': s.stage,
+                        'تاريخ المباشرة': new Date(meta.date).toLocaleDateString(),
+                        'مباشر بواسطة': meta.assignedByUserName
                     };
                 });
                 const listWs = XLSX.utils.json_to_sheet(listData);
-                XLSX.utils.book_append_sheet(workbook, listWs, `${list} Assignments`);
+                XLSX.utils.book_append_sheet(workbook, listWs, `مباشرات Course ${list.replace('L', '')}`);
             }
         });
 
@@ -121,17 +121,17 @@ export default function ReportsPage() {
             const deptStudents = students.filter(s => s.department === dept);
             if (deptStudents.length > 0) {
                 const deptData = deptStudents.map(s => {
-                    const assignedLists = Object.keys(s.assignments).join(', ') || 'Unassigned';
+                    const assignedLists = Object.keys(s.assignments).map(l => l.replace('L', 'Course ')).join(', ') || 'غير مباشر';
                     return {
-                        'Student Name': s.name,
-                        'Study Type': s.studyType,
-                        'Stage': s.stage,
-                        'Assignments': assignedLists
+                        'اسم الطالب': s.name,
+                        'نوع الدراسة': s.studyType === 'Morning' ? 'صباحي' : 'مسائي',
+                        'المرحلة الدراسية': s.stage,
+                        'المباشرات': assignedLists
                     };
                 });
                 const deptWs = XLSX.utils.json_to_sheet(deptData);
                 const safeDeptName = dept.substring(0, 25);
-                XLSX.utils.book_append_sheet(workbook, deptWs, `Dept ${safeDeptName}`);
+                XLSX.utils.book_append_sheet(workbook, deptWs, `قسم ${safeDeptName}`);
             }
         });
 
@@ -176,9 +176,9 @@ export default function ReportsPage() {
         <div className="space-y-6 max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight">Reports & Statistics</h1>
+                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight">التقارير والإحصائيات</h1>
                     <p className="text-sm font-medium text-slate-500 mt-2">
-                        Comprehensive overview of system data
+                        نظرة شاملة على بيانات النظام
                     </p>
                 </div>
                 <button
@@ -186,21 +186,21 @@ export default function ReportsPage() {
                     className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg transition-all text-sm font-medium shadow-sm active:scale-95"
                 >
                     <Download className="w-4 h-4" />
-                    Export Full Data (Excel)
+                    تصدير البيانات كاملة (Excel)
                 </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard icon={<Users />} label="Total Students" value={stats.total} color="bg-blue-50 text-blue-600" />
-                <StatCard icon={<CheckCircle />} label="Assigned Students" value={stats.assigned} color="bg-green-50 text-green-600" />
-                <StatCard icon={<Clock />} label="Assigned Today" value={stats.assignedToday} color="bg-purple-50 text-purple-600" />
+                <StatCard icon={<Users />} label="إجمالي الطلاب" value={stats.total} color="bg-blue-50 text-blue-600" />
+                <StatCard icon={<CheckCircle />} label="الطلاب المباشرين" value={stats.assigned} color="bg-green-50 text-green-600" />
+                <StatCard icon={<Clock />} label="مباشرين اليوم" value={stats.assignedToday} color="bg-purple-50 text-purple-600" />
             </div>
 
             <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-muted/30">
                     <div className="flex items-center gap-2">
                         <BarChart3 className="w-5 h-5 text-primary" />
-                        <h2 className="text-lg font-bold">Assignment Distribution</h2>
+                        <h2 className="text-lg font-bold">توزيع المباشرات</h2>
                     </div>
 
                     <div className="flex p-1 bg-gray-100 rounded-xl">
@@ -209,14 +209,14 @@ export default function ReportsPage() {
                             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${chartView === 'List' ? 'bg-white shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                         >
                             <LayoutGrid className="w-4 h-4" />
-                            By List
+                            حسب Course
                         </button>
                         <button
                             onClick={() => setChartView('Department')}
                             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${chartView === 'Department' ? 'bg-white shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                         >
                             <Building2 className="w-4 h-4" />
-                            By Department
+                            حسب القسم
                         </button>
                     </div>
                 </div>
@@ -259,11 +259,11 @@ export default function ReportsPage() {
             <div className="bg-white p-6 rounded-2xl border border-border shadow-sm">
                 <div className="flex items-center gap-2 mb-6">
                     <div className="p-2 bg-primary/5 rounded-lg text-primary"><Percent className="w-5 h-5" /></div>
-                    <h2 className="text-lg font-bold">Percentage Calculator</h2>
+                    <h2 className="text-lg font-bold">حاسبة النسب</h2>
                 </div>
                 <div className="flex flex-col md:flex-row gap-6 items-end">
                     <div className="w-full md:w-64">
-                        <label className="block text-sm font-semibold text-muted-foreground mb-2 px-1">Calculate By</label>
+                        <label className="block text-sm font-semibold text-muted-foreground mb-2 px-1">حساب حسب</label>
                         <Dropdown
                             value={calcType}
                             placement={groupedCalcData.length === 0 ? 'top' : 'bottom'}
@@ -272,13 +272,13 @@ export default function ReportsPage() {
                                 setCalcSelection(val === 'List' ? 'L1' : departments[0] || '');
                             }}
                             options={[
-                                { label: 'List (L1-L4)', value: 'List' },
-                                { label: 'Department', value: 'Department' }
+                                { label: 'Course (1-4)', value: 'List' },
+                                { label: 'القسم', value: 'Department' }
                             ]}
                         />
                     </div>
                     <div className="w-full md:w-64">
-                        <label className="block text-sm font-semibold text-muted-foreground mb-2 px-1">Selection</label>
+                        <label className="block text-sm font-semibold text-muted-foreground mb-2 px-1">الاختيار</label>
                         <Dropdown
                             value={calcSelection}
                             placement={groupedCalcData.length === 0 ? 'top' : 'bottom'}
@@ -303,13 +303,13 @@ export default function ReportsPage() {
                 </div>
                 {groupedCalcData.length > 0 && (
                     <div className="mt-8 overflow-hidden rounded-2xl border border-border">
-                        <table className="w-full text-left border-collapse text-sm">
+                        <table className="w-full text-right border-collapse text-sm">
                             <thead className="bg-muted/50 text-muted-foreground font-bold border-b border-border">
                                 <tr>
-                                    <th className="px-6 py-4">{calcType === 'List' ? 'Department' : 'List'}</th>
-                                    <th className="px-6 py-4">Assigned</th>
-                                    <th className="px-6 py-4">Percentage</th>
-                                    <th className="px-6 py-4 w-full">Distribution</th>
+                                    <th className="px-6 py-4">{calcType === 'List' ? 'القسم' : 'Course'}</th>
+                                    <th className="px-6 py-4">المباشرين</th>
+                                    <th className="px-6 py-4">النسبة</th>
+                                    <th className="px-6 py-4 w-full">التوزيع</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">

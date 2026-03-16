@@ -91,10 +91,10 @@ export function Sidebar() {
                     {currentUser?.role !== 'Viewer' && (
                         <NavItem href="/" icon={<Users />} label="Main List" active={pathname === '/'} expanded={expanded} />
                     )}
-                    <NavItem href="/list/l1" icon={<List />} label="List 1" active={pathname === '/list/l1'} expanded={expanded} />
-                    <NavItem href="/list/l2" icon={<List />} label="List 2" active={pathname === '/list/l2'} expanded={expanded} />
-                    <NavItem href="/list/l3" icon={<List />} label="List 3" active={pathname === '/list/l3'} expanded={expanded} />
-                    <NavItem href="/list/l4" icon={<List />} label="List 4" active={pathname === '/list/l4'} expanded={expanded} />
+                    <NavItem href="/list/l1" icon={<List />} label="Course 1" active={pathname === '/list/l1'} expanded={expanded} />
+                    <NavItem href="/list/l2" icon={<List />} label="Course 2" active={pathname === '/list/l2'} expanded={expanded} />
+                    <NavItem href="/list/l3" icon={<List />} label="Course 3" active={pathname === '/list/l3'} expanded={expanded} />
+                    <NavItem href="/list/l4" icon={<List />} label="Course 4" active={pathname === '/list/l4'} expanded={expanded} />
 
                     {currentUser?.role === 'Admin' && (
                         <>

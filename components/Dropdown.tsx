@@ -65,7 +65,7 @@ export default function Dropdown({ value, onChange, options, className = '', dis
                                     ref={searchInputRef}
                                     type="text"
                                     className="w-full pl-9 pr-3 py-1.5 text-sm border border-border rounded-md outline-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-foreground"
-                                    placeholder="Search..."
+                                    placeholder="البحث..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     onClick={(e) => e.stopPropagation()}
@@ -90,7 +90,7 @@ export default function Dropdown({ value, onChange, options, className = '', dis
                                 </li>
                             ))
                         ) : (
-                            <li className="px-4 py-3 text-sm text-muted-foreground text-center">No results found</li>
+                            <li className="px-4 py-3 text-sm text-muted-foreground text-center">لا توجد نتائج</li>
                         )}
                     </ul>
                 </div>

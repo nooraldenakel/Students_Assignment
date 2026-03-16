@@ -100,18 +100,18 @@ export default function MainPage() {
     const exportUnassignedToExcel = () => {
         const unassigned = filteredStudents.filter(s => Object.keys(s.assignments).length === 0);
         if (unassigned.length === 0) {
-            showAlert('Export Failed', 'No unassigned students match your criteria.', 'error');
+            showAlert('فشل التصدير', 'لا يوجد طلاب غير مباشرين يطابقون معاييرك.', 'error');
             return;
         }
         const data = unassigned.map(s => ({
-            Name: s.name,
-            Stage: s.stage,
-            Department: s.department,
-            'Study Type': s.studyType
+            'الاسم': s.name,
+            'المرحلة الدراسية': s.stage,
+            'القسم': s.department,
+            'نوع الدراسة': s.studyType === 'Morning' ? 'صباحي' : 'مسائي'
         }));
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Unassigned");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "غير مباشر");
         XLSX.writeFile(workbook, "unassigned_filtered_students.xlsx");
     };
 
@@ -130,47 +130,47 @@ export default function MainPage() {
         <div className="space-y-6 max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight">Main Student List</h1>
+                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight">القائمة الرئيسية للطلاب</h1>
                     <p className="text-sm font-medium text-slate-500 mt-2">
-                        Logged in as <strong className="text-indigo-600">{currentUser.name}</strong> ({currentUser.role})
+                        مسجل الدخول كـ <strong className="text-indigo-600">{currentUser.name}</strong> ({currentUser.role})
                     </p>
                 </div>
 
                 <div className="flex items-center gap-4">
                     <div className="bg-white px-4 py-2 flex items-center gap-4 rounded-lg border border-border shadow-sm text-sm">
                         <div>
-                            <span className="text-muted-foreground mr-2">Total Assigned:</span>
+                            <span className="text-muted-foreground mr-2">إجمالي المباشرين:</span>
                             <span className="font-bold text-foreground">{stats.totalAssigned}</span>
                         </div>
                         <div className="w-px h-4 bg-border"></div>
                         <div>
-                            <span className="text-muted-foreground mr-2">Assigned Today:</span>
+                            <span className="text-muted-foreground mr-2">المباشرين اليوم:</span>
                             <span className="font-bold text-green-600">{stats.assignedToday}</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-border shadow-sm flex flex-col sm:flex-row gap-4">
+            <div className="bg-white p-4 rounded-xl border border-border shadow-sm flex flex-col sm:flex-row gap-4" dir="rtl">
                 <div className="relative flex-1">
-                    <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Search className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                         type="text"
-                        placeholder="Search students..."
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300 font-medium text-sm"
+                        placeholder="البحث عن طلاب..."
+                        className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300 font-medium text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
 
-                <div className="flex gap-4">
-                    <div className="w-[180px] sm:w-[220px]">
+                <div className="flex flex-wrap gap-4 items-center">
+                    <div className="w-[140px] sm:w-[180px] md:w-[220px]">
                         <Dropdown
                             value={deptFilter}
                             searchable={true}
                             onChange={(val) => setDeptFilter(val as any)}
                             options={[
-                                { label: 'All Departments', value: 'All' },
+                                { label: 'جميع الأقسام', value: 'All' },
                                 ...departments.map((dept: string) => ({ label: dept, value: dept }))
                             ]}
                         />
@@ -181,9 +181,9 @@ export default function MainPage() {
                             value={typeFilter}
                             onChange={(val) => setTypeFilter(val as any)}
                             options={[
-                                { label: 'All Types', value: 'All' },
-                                { label: 'Morning', value: 'Morning' },
-                                { label: 'Evening', value: 'Evening' }
+                                { label: 'جميع الأنواع', value: 'All' },
+                                { label: 'صباحي', value: 'Morning' },
+                                { label: 'مسائي', value: 'Evening' }
                             ]}
                         />
                     </div>
@@ -194,25 +194,25 @@ export default function MainPage() {
                         disabled={filteredStudents.length === 0}
                     >
                         <Download className="w-4 h-4" />
-                        Export
+                        تصدير
                     </button>
                 </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-border flex flex-col relative z-10 overflow-visible">
                 <div className="overflow-x-auto rounded-t-2xl w-full">
-                    <table className="w-full text-left border-separate border-spacing-0">
+                    <table className="w-full text-right border-separate border-spacing-0" dir="rtl">
                         <thead>
-                            <tr className="bg-muted/50 text-muted-foreground text-[11px] font-bold uppercase tracking-wider">
-                                <th className="p-4 border-b border-border">Student Name</th>
-                                <th className="p-4 border-b border-border">Study Stage</th>
-                                <th className="p-4 border-b border-border">Department</th>
-                                <th className="p-4 border-b border-border text-center">Study Type</th>
+                            <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border">
+                                <th className="p-4 border-b border-border">اسم الطالب</th>
+                                <th className="p-4 border-b border-border text-center">المرحلة الدراسية</th>
+                                <th className="p-4 border-b border-border text-center">القسم</th>
+                                <th className="p-4 border-b border-border text-center">نوع الدراسة</th>
                                 <th className="p-4 border-b border-border text-right w-[240px]">
                                     <div className="flex flex-col gap-2 items-end">
-                                        <span className="text-indigo-600 font-extrabold">Assignments</span>
+                                        <span className="text-indigo-600 font-extrabold pb-1">ازالة الكل</span>
                                         {isAdmin && (
-                                            <div className="flex gap-1 items-center bg-white p-1 rounded-lg border border-border shadow-sm">
+                                            <div className="flex gap-1.5 justify-end w-full">
                                                 {(['L1', 'L2', 'L3', 'L4'] as const).map(list => {
                                                     const hasAssignments = students.some(s => !!s.assignments[list]);
                                                     return (
@@ -221,22 +221,21 @@ export default function MainPage() {
                                                             disabled={!hasAssignments}
                                                             onClick={() => {
                                                                 showAlert(
-                                                                    `Clear ${list}?`,
-                                                                    `This will remove all student assignments for ${list}. This action cannot be undone.`,
+                                                                    `مسح كل ${list}؟`,
+                                                                    `سيؤدي هذا إلى مسح جميع مباشرات الطلاب في Course ${list}. لا يمكن التراجع عن هذا الإجراء.`,
                                                                     'confirm',
                                                                     () => clearAssignmentsByList(list)
                                                                 );
                                                             }}
-                                                            title={`Clear all ${list}`}
-                                                            className={`flex flex-col items-center justify-center rounded transition-all active:scale-95 border
+                                                            title={`مسح كل ${list}`}
+                                                            className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center font-extrabold transition-all active:scale-95 border
                                                             ${hasAssignments
-                                                                    ? 'bg-red-50 hover:bg-red-600 text-red-600 hover:text-white border-red-100'
-                                                                    : 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'}
-                                                            px-1 py-0.5 min-w-[36px]
+                                                                    ? 'bg-red-50 hover:bg-red-600 text-red-600 hover:text-white border-red-200 hover:shadow-[0_4px_10px_-2px_rgba(239,68,68,0.5)]'
+                                                                    : 'bg-white text-slate-300 border-slate-100 cursor-not-allowed opacity-50 grayscale'}
                                                         `}
                                                         >
-                                                            <span className="text-[8px] font-bold leading-none mb-0.5 uppercase">{list}</span>
-                                                            <Trash2 className="w-2.5 h-2.5" />
+                                                            <span className="text-[10px] leading-none mb-0.5 uppercase">{list}</span>
+                                                            <Trash2 className="w-3 h-3" />
                                                         </button>
                                                     );
                                                 })}
@@ -251,7 +250,7 @@ export default function MainPage() {
                             {paginatedStudents.length === 0 ? (
                                 <tr>
                                     <td colSpan={canEdit ? 6 : 5} className="p-12 text-center text-muted-foreground bg-white italic">
-                                        No students match your current filters.
+                                        لا يوجد طلاب يطابقون خيارات التصفية الحالية.
                                     </td>
                                 </tr>
                             ) : (
@@ -287,14 +286,14 @@ export default function MainPage() {
                                             </>
                                         ) : (
                                             <>
-                                                <td className="p-4 text-muted-foreground font-medium">{student.stage}</td>
-                                                <td className="p-4 text-muted-foreground font-medium">{student.department}</td>
+                                                <td className="p-4 text-center text-muted-foreground font-medium">{student.stage.replace('Stage', 'المرحلة')}</td>
+                                                <td className="p-4 text-center text-muted-foreground font-medium">{student.department}</td>
                                             </>
                                         )}
                                         <td className="p-4 text-center">
                                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight shadow-sm
                                             ${student.studyType === 'Morning' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-purple-50 text-purple-600 border border-purple-100'}`}>
-                                                {student.studyType}
+                                                {student.studyType === 'Morning' ? 'صباحي' : 'مسائي'}
                                             </span>
                                         </td>
                                         <td className="p-4">
@@ -334,7 +333,7 @@ export default function MainPage() {
                                                     <button
                                                         onClick={() => startEdit(student)}
                                                         className="p-2 text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-600 hover:text-white rounded-xl transition-all opacity-70 group-hover:opacity-100 flex items-center justify-center ml-auto shadow-sm"
-                                                        title="Edit Student"
+                                                        title="تعديل الطالب"
                                                     >
                                                         <Edit2 className="w-4 h-4" />
                                                     </button>

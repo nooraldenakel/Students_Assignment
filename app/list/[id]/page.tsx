@@ -78,18 +78,18 @@ export default function ListPage({ params }: { params: { id: string } }) {
         const data = filteredStudents.map(s => {
             const meta = s.assignments[listName];
             return {
-                Name: s.name,
-                Stage: s.stage,
-                Department: s.department,
-                'Study Type': s.studyType,
-                'Assigned Date': meta ? new Date(meta.date).toLocaleDateString() : '-',
-                'Assigned By': meta ? meta.assignedByUserName : '-'
+                'الاسم': s.name,
+                'المرحلة الدراسية': s.stage,
+                'القسم': s.department,
+                'نوع الدراسة': s.studyType === 'Morning' ? 'صباحي' : 'مسائي',
+                'تاريخ المباشرة': meta ? new Date(meta.date).toLocaleDateString() : '-',
+                'مباشر بواسطة': meta ? meta.assignedByUserName : '-'
             };
         });
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, `List_${listName}`);
-        XLSX.writeFile(workbook, `list_${listName}_students.xlsx`);
+        XLSX.utils.book_append_sheet(workbook, worksheet, `Course_${listName}`);
+        XLSX.writeFile(workbook, `course_${listName}_students.xlsx`);
     };
 
     const canRemove = currentUser.role === 'Admin';
@@ -98,44 +98,44 @@ export default function ListPage({ params }: { params: { id: string } }) {
         <div className="space-y-6 max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight uppercase">List {listName.replace('L', '')}</h1>
+                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight uppercase">Course {listName.replace('L', '')}</h1>
                     <p className="text-sm font-medium text-slate-500 mt-2">
-                        Logged in as <strong className="text-indigo-600">{currentUser.name}</strong> ({currentUser.role})
+                        مسجل الدخول كـ <strong className="text-indigo-600">{currentUser.name}</strong> ({currentUser.role})
                     </p>
                 </div>
                 <button
                     onClick={exportListToExcel}
                     className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all duration-300 transform active:scale-95 text-sm font-bold shadow-[0_5px_15px_-5px_rgba(79,70,229,0.5)] hover:shadow-[0_10px_20px_-5px_rgba(79,70,229,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                    title={`Export filtered students in ${listName} to Excel`}
+                    title={`تصدير الطلاب المفلترين في Course ${listName} إلى Excel`}
                     disabled={filteredStudents.length === 0}
                 >
                     <Download className="w-4 h-4" />
-                    Export List
+                    تصدير
                 </button>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-border shadow-sm flex flex-col sm:flex-row gap-4">
+            <div className="bg-white p-4 rounded-xl border border-border shadow-sm flex flex-col sm:flex-row gap-4 mb-6" dir="rtl">
                 <div className="relative flex-1">
-                    <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Search className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                         type="text"
-                        placeholder="Search students..."
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300 font-medium text-sm"
+                        placeholder="البحث عن اسم أو بريد..."
+                        className="w-full pr-10 pl-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-4 items-center">
                     <div className="flex items-center gap-2">
                         <Filter className="w-5 h-5 text-muted-foreground" />
-                        <div className="w-[180px] sm:w-[220px]">
+                        <div className="w-[140px] sm:w-[180px] md:w-[220px]">
                             <Dropdown
                                 value={deptFilter}
                                 searchable={true}
                                 onChange={(val) => setDeptFilter(val as any)}
                                 options={[
-                                    { label: 'All Departments', value: 'All' },
+                                    { label: 'جميع الأقسام', value: 'All' },
                                     ...departments
                                         .filter((dept: string) => {
                                             if (currentUser?.role === 'Viewer' && !currentUser.allowedDepartments?.includes(dept)) {
@@ -154,8 +154,8 @@ export default function ListPage({ params }: { params: { id: string } }) {
                             value={stageFilter}
                             onChange={(val) => setStageFilter(val)}
                             options={[
-                                { label: 'All Stages', value: 'All' },
-                                ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).map(stage => ({ label: stage, value: stage }))
+                                { label: 'جميع المراحل', value: 'All' },
+                                ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).map(stage => ({ label: stage.replace('Stage', 'المرحلة'), value: stage }))
                             ]}
                         />
                     </div>
@@ -164,15 +164,15 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
             <div className="bg-white rounded-xl shadow-sm border border-border flex flex-col relative z-10 w-full overflow-visible">
                 <div className="overflow-x-auto w-full rounded-t-xl">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-right border-collapse" dir="rtl">
                         <thead>
-                            <tr className="bg-muted text-muted-foreground text-sm border-b border-border">
-                                <th className="p-4 font-medium leading-none">Student Name</th>
-                                <th className="p-4 font-medium leading-none">Study Stage</th>
-                                <th className="p-4 font-medium leading-none">Department</th>
-                                <th className="p-4 font-medium leading-none">Study Type</th>
-                                <th className="p-4 font-medium leading-none">Assignment Date</th>
-                                <th className="p-4 font-medium leading-none">Assigned By</th>
+                            <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border">
+                                <th className="p-4 font-medium leading-none">اسم الطالب</th>
+                                <th className="p-4 font-medium leading-none text-center">المرحلة الدراسية</th>
+                                <th className="p-4 font-medium leading-none text-center">القسم</th>
+                                <th className="p-4 font-medium leading-none text-center">نوع الدراسة</th>
+                                <th className="p-4 font-medium leading-none text-center">تاريخ المباشرة</th>
+                                <th className="p-4 font-medium leading-none text-center">مباشر بواسطة</th>
                                 {canRemove && <th className="p-4 font-medium leading-none w-16"></th>}
                             </tr>
                         </thead>
@@ -180,7 +180,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
                             {paginatedStudents.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                                        No students found matching your criteria in {listName}.
+                                        لا يوجد طلاب يطابقون معاييرك في Course {listName.replace('L', '')}.
                                     </td>
                                 </tr>
                             ) : (
@@ -192,20 +192,20 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                                 {student.name}
                                             </div>
                                         </td>
-                                        <td className="p-4 text-muted-foreground">{student.stage}</td>
-                                        <td className="p-4 text-muted-foreground">{student.department}</td>
-                                        <td className="p-4">
+                                        <td className="p-4 text-center text-muted-foreground">{student.stage.replace('Stage', 'المرحلة')}</td>
+                                        <td className="p-4 text-center text-muted-foreground">{student.department}</td>
+                                        <td className="p-4 text-center">
                                             <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${student.studyType === 'Morning' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
                                                 }`}>
-                                                {student.studyType}
+                                                {student.studyType === 'Morning' ? 'صباحي' : 'مسائي'}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-muted-foreground">
+                                        <td className="p-4 text-center text-muted-foreground">
                                             {student.assignments[listName]
                                                 ? new Date(student.assignments[listName]!.date).toLocaleDateString()
                                                 : '-'}
                                         </td>
-                                        <td className="p-4 text-muted-foreground">
+                                        <td className="p-4 text-center text-muted-foreground">
                                             {student.assignments[listName]
                                                 ? student.assignments[listName]!.assignedByUserName
                                                 : '-'}
@@ -215,14 +215,14 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                                 <button
                                                     onClick={() => {
                                                         showAlert(
-                                                            'Remove Assignment?',
-                                                            `Are you sure you want to remove ${student.name} from ${listName}?`,
+                                                            'إزالة المباشرة؟',
+                                                            `هل أنت متأكد من رغبتك في إزالة ${student.name} من Course ${listName.replace('L', '')}؟`,
                                                             'confirm',
                                                             () => removeAssignment(student.id, listName, currentUser)
                                                         );
                                                     }}
                                                     className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xs transition-all border bg-red-600 text-white border-red-600 transform scale-105 shadow-[0_4px_10px_-2px_rgba(220,38,38,0.5)] active:scale-95"
-                                                    title="Remove student from list"
+                                                    title="إزالة الطالب من Course"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>

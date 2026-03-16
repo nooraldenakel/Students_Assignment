@@ -63,8 +63,8 @@ export default function Pagination({
 
     return (
         <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-white border-t border-border w-full gap-4 relative z-20" style={{ borderBottomLeftRadius: 'inherit', borderBottomRightRadius: 'inherit' }}>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground w-full sm:w-auto">
-                <span className="font-medium whitespace-nowrap">Show:</span>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium">عرض:</span>
                 <div className="w-[110px]">
                     <Dropdown
                         value={displaySizeValue}
@@ -78,8 +78,8 @@ export default function Pagination({
                             { label: '75', value: '75' },
                             { label: '100', value: '100' },
                             { label: '200', value: '200' },
-                            { label: 'All', value: 'All' },
-                            { label: 'Custom...', value: 'Custom' }
+                            { label: 'الكل', value: 'All' },
+                            { label: 'مخصص...', value: 'Custom' }
                         ]}
                     />
                 </div>
@@ -91,11 +91,11 @@ export default function Pagination({
                             min="1"
                             value={customSize}
                             onChange={(e) => setCustomSize(e.target.value)}
-                            placeholder="Qty"
+                            placeholder="الكمية"
                             className="w-16 border border-border rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-primary/20 text-sm"
                         />
                         <button type="submit" className="text-xs bg-primary text-white px-2 py-1 rounded hover:bg-primary/90">
-                            Set
+                            تعيين
                         </button>
                     </form>
                 )}
@@ -110,9 +110,10 @@ export default function Pagination({
                     <ChevronLeft className="w-5 h-5 text-foreground" />
                 </button>
 
-                <span className="text-sm font-medium text-foreground px-2">
-                    Page {currentPage} of {totalPages}
-                </span>
+                <span className="text-sm font-medium text-muted-foreground">
+                صفحة <strong className="text-foreground">{currentPage}</strong> من <strong className="text-foreground">{totalPages}</strong>
+                <span className="hidden sm:inline"> ({totalItems} عناصر إجمالية)</span>
+            </span>
 
                 <button
                     onClick={() => onPageChange(currentPage + 1)}

@@ -59,7 +59,7 @@ export default function Modal() {
                                 onClick={hideAlert}
                                 className="flex-1 px-6 py-3 rounded-2xl border border-border bg-white font-bold text-foreground hover:bg-muted transition-all active:scale-95"
                             >
-                                Cancel
+                                إلغاء
                             </button>
                             <button
                                 onClick={() => {
@@ -68,7 +68,7 @@ export default function Modal() {
                                 }}
                                 className={`flex-1 px-6 py-3 rounded-2xl ${btnColors} font-bold text-white shadow-lg shadow-amber-200 transition-all active:scale-95`}
                             >
-                                Confirm
+                                تأكيد
                             </button>
                         </>
                     ) : (
@@ -76,7 +76,7 @@ export default function Modal() {
                             onClick={hideAlert}
                             className={`w-full px-6 py-3 rounded-2xl ${btnColors} font-bold text-white shadow-lg transition-all active:scale-95`}
                         >
-                            Understood
+                            حسناً
                         </button>
                     )}
                 </div>
