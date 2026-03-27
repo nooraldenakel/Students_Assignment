@@ -27,7 +27,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
         if (!currentUser) router.push('/login');
     }, [currentUser, router]);
 
-    const filteredStudents = useMemo(() => {
+    const contextStudents = useMemo(() => {
         const filtered = students.filter((s: Student) => {
             if (!s.assignments[listName]) return false;
 
@@ -36,20 +36,32 @@ export default function ListPage({ params }: { params: { id: string } }) {
                 if (!currentUser.allowedDepartments?.includes(s.department)) return false;
             }
 
-            const matchName = s.name.toLowerCase().includes(searchTerm.toLowerCase());
             const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
             const matchStage = stageFilter === 'All' || s.stage === stageFilter;
 
-            return matchName && matchDept && matchStage;
+            return matchDept && matchStage;
         });
 
-        // Sort by assignment date (newest first)
+        // Sort by assignment date (oldest first: chronological insertion order)
         return filtered.sort((a, b) => {
+            const dateA = new Date(a.assignments[listName]!.date).getTime();
+            const dateB = new Date(b.assignments[listName]!.date).getTime();
+            return dateA - dateB;
+        });
+    }, [students, listName, currentUser, deptFilter, stageFilter]);
+
+    const filteredStudents = useMemo(() => {
+        const searched = contextStudents.filter((s: Student) => {
+            return s.name.toLowerCase().includes(searchTerm.toLowerCase());
+        });
+
+        // Re-sort searched array to show newest assignments at the top for display
+        return searched.sort((a, b) => {
             const dateA = new Date(a.assignments[listName]!.date).getTime();
             const dateB = new Date(b.assignments[listName]!.date).getTime();
             return dateB - dateA;
         });
-    }, [students, listName, currentUser, searchTerm, deptFilter, stageFilter]);
+    }, [contextStudents, searchTerm, listName]);
 
     // Reset pagination when filters change
     useEffect(() => {
@@ -167,6 +179,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
                     <table className="w-full text-right border-collapse" dir="rtl">
                         <thead>
                             <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border">
+                                <th className="p-4 font-extrabold leading-none text-center w-12 text-slate-400">#</th>
                                 <th className="p-4 font-medium leading-none">اسم الطالب</th>
                                 <th className="p-4 font-medium leading-none text-center">المرحلة الدراسية</th>
                                 <th className="p-4 font-medium leading-none text-center">القسم</th>
@@ -179,13 +192,16 @@ export default function ListPage({ params }: { params: { id: string } }) {
                         <tbody className="divide-y divide-border text-sm">
                             {paginatedStudents.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                                    <td colSpan={canRemove ? 8 : 7} className="p-8 text-center text-muted-foreground">
                                         لا يوجد طلاب يطابقون معاييرك في Course {listName.replace('L', '')}.
                                     </td>
                                 </tr>
                             ) : (
-                                paginatedStudents.map((student: Student) => (
+                                paginatedStudents.map((student: Student) => {
+                                    const renderedIndex = contextStudents.findIndex(s => s.id === student.id) + 1;
+                                    return (
                                     <tr key={student.id} className="hover:bg-blue-50/50 transition-all duration-200 group/row bg-white relative">
+                                        <td className="p-4 text-center font-bold text-slate-500">{renderedIndex}</td>
                                         <td className="p-4 relative">
                                             <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 origin-top duration-300 transition-transform scale-y-0 group-hover/row:scale-y-100"></div>
                                             <div className="font-bold text-slate-800 group-hover/row:text-indigo-600 transition-colors duration-200">
@@ -229,7 +245,8 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                             </td>
                                         )}
                                     </tr>
-                                ))
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
