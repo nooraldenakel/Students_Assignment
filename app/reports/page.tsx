@@ -11,6 +11,32 @@ import {
 } from 'recharts';
 import Dropdown from '../../components/Dropdown';
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+            <div className="bg-white p-4 rounded-xl shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] border border-border" dir="rtl">
+                <p className="font-extrabold text-[#1e293b] text-base mb-2 border-b border-slate-100 pb-2">{label}</p>
+                <div className="space-y-1.5 text-sm font-semibold">
+                    <p className="flex justify-between gap-4 text-slate-800">
+                        <span>إجمالي الطلاب:</span>
+                        <span>{data.total}</span>
+                    </p>
+                    <p className="flex justify-between gap-4 text-emerald-600">
+                        <span>المباشرين:</span>
+                        <span>{data.count}</span>
+                    </p>
+                    <p className="flex justify-between gap-4 text-rose-500">
+                        <span>غير المباشرين:</span>
+                        <span>{data.unassigned}</span>
+                    </p>
+                </div>
+            </div>
+        );
+    }
+    return null;
+};
+
 export default function ReportsPage() {
     const router = useRouter();
     const { currentUser, students, departments, showAlert, isInitialized, isHydrated } = useStore();
@@ -45,13 +71,23 @@ export default function ReportsPage() {
             count: students.filter(s => !!s.assignments[list]).length
         }));
 
-        const deptData = departments.map((dept: string) => ({
-            name: dept,
-            count: students.filter((s: Student) => s.department === dept && Object.keys(s.assignments).length > 0).length
-        }));
+        const deptData = departments.map((dept: string) => {
+            const inDept = students.filter((s: Student) => s.department === dept);
+            const count = inDept.filter((s: Student) => Object.keys(s.assignments).length > 0).length;
+            const total = inDept.length;
+            const unassigned = total - count;
+            return {
+                name: dept,
+                count,
+                total,
+                unassigned
+            };
+        });
+
+        deptData.sort((a, b) => b.count - a.count);
 
         return { listData, deptData };
-    }, [students]);
+    }, [students, departments]);
 
     const COLORS = ['#137fec', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
@@ -239,9 +275,9 @@ export default function ReportsPage() {
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={chartData.deptData} margin={{ top: 20, right: 30, left: 20, bottom: 40 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 11 }} angle={-45} textAnchor="end" interval={0} height={60} />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#334155', fontSize: 13, fontWeight: 'bold' }} angle={-45} textAnchor="end" interval={0} height={80} />
                                             <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 12 }} />
-                                            <Tooltip cursor={{ fill: '#F1F5F9', radius: 8 }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                                            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F1F5F9', radius: 8 }} />
                                             <Bar dataKey="count" radius={[8, 8, 0, 0]} barSize={40}>
                                                 {chartData.deptData.map((_entry, index) => (
                                                     <RechartsCell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

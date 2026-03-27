@@ -210,7 +210,7 @@ export default function MainPage() {
                                 <th className="p-4 border-b border-border text-center">نوع الدراسة</th>
                                 <th className="p-4 border-b border-border text-right w-[240px]">
                                     <div className="flex flex-col gap-2 items-end">
-                                        <span className="text-indigo-600 font-extrabold pb-1">ازالة الكل</span>
+                                        {isAdmin && <span className="text-indigo-600 font-extrabold pb-1">ازالة الكل</span>}
                                         {isAdmin && (
                                             <div className="flex gap-1.5 justify-end w-full">
                                                 {(['L1', 'L2', 'L3', 'L4'] as const).map(list => {
