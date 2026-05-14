@@ -25,6 +25,8 @@ export default function MainPage() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editStage, setEditStage] = useState('');
     const [editDept, setEditDept] = useState<Department>('Art');
+    // Cache of last saved edits so the display is instant regardless of store/realtime timing
+    const [savedEdits, setSavedEdits] = useState<Record<string, { stage: string; department: Department }>>({});
 
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState<number | 'All'>(10);
@@ -116,7 +118,11 @@ export default function MainPage() {
     };
 
     const handleSaveEdit = (id: string) => {
-        updateStudent(id, { stage: editStage, department: editDept });
+        const newStage = editStage;
+        const newDept = editDept;
+        // Cache immediately so display is correct before store/realtime updates
+        setSavedEdits(prev => ({ ...prev, [id]: { stage: newStage, department: newDept } }));
+        updateStudent(id, { stage: newStage, department: newDept });
         setEditingId(null);
     };
 
@@ -157,10 +163,19 @@ export default function MainPage() {
                     <input
                         type="text"
                         placeholder="البحث عن طلاب..."
-                        className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300 font-medium text-sm"
+                        className="w-full pr-10 pl-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300 font-medium text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-all duration-200"
+                            title="مسح البحث"
+                        >
+                            <X className="w-3 h-3" />
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap gap-4 items-center">
@@ -286,8 +301,8 @@ export default function MainPage() {
                                             </>
                                         ) : (
                                             <>
-                                                <td className="p-4 text-center text-muted-foreground font-medium">{student.stage.replace('Stage', 'المرحلة')}</td>
-                                                <td className="p-4 text-center text-muted-foreground font-medium">{student.department}</td>
+                                                <td className="p-4 text-center text-muted-foreground font-medium">{(savedEdits[student.id]?.stage ?? student.stage).replace('Stage', 'المرحلة')}</td>
+                                                <td className="p-4 text-center text-muted-foreground font-medium">{savedEdits[student.id]?.department ?? student.department}</td>
                                             </>
                                         )}
                                         <td className="p-4 text-center">

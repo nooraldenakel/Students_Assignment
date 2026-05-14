@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useStore, Student, Department } from '../../../lib/store';
 import { useRouter } from 'next/navigation';
-import { Trash2, Download, Search, Filter } from 'lucide-react';
+import { Trash2, Download, Search, Filter, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../../../components/Pagination';
 import Dropdown from '../../../components/Dropdown';
@@ -132,10 +132,19 @@ export default function ListPage({ params }: { params: { id: string } }) {
                     <input
                         type="text"
                         placeholder="البحث عن اسم أو بريد..."
-                        className="w-full pr-10 pl-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
+                        className="w-full pr-10 pl-9 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
+                    {searchTerm && (
+                        <button
+                            onClick={() => setSearchTerm('')}
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-all duration-200"
+                            title="مسح البحث"
+                        >
+                            <X className="w-3 h-3" />
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex flex-wrap gap-4 items-center">
@@ -185,14 +194,14 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                 <th className="p-4 font-medium leading-none text-center">القسم</th>
                                 <th className="p-4 font-medium leading-none text-center">نوع الدراسة</th>
                                 <th className="p-4 font-medium leading-none text-center">تاريخ المباشرة</th>
-                                <th className="p-4 font-medium leading-none text-center">مباشر بواسطة</th>
+                                {currentUser.role !== 'Viewer' && <th className="p-4 font-medium leading-none text-center">مباشر بواسطة</th>}
                                 {canRemove && <th className="p-4 font-medium leading-none w-16"></th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-sm">
                             {paginatedStudents.length === 0 ? (
                                 <tr>
-                                    <td colSpan={canRemove ? 8 : 7} className="p-8 text-center text-muted-foreground">
+                                    <td colSpan={canRemove ? 8 : currentUser.role === 'Viewer' ? 6 : 7} className="p-8 text-center text-muted-foreground">
                                         لا يوجد طلاب يطابقون معاييرك في Course {listName.replace('L', '')}.
                                     </td>
                                 </tr>
@@ -221,11 +230,13 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                                 ? new Date(student.assignments[listName]!.date).toLocaleDateString()
                                                 : '-'}
                                         </td>
-                                        <td className="p-4 text-center text-muted-foreground">
-                                            {student.assignments[listName]
-                                                ? student.assignments[listName]!.assignedByUserName
-                                                : '-'}
-                                        </td>
+                                        {currentUser.role !== 'Viewer' && (
+                                            <td className="p-4 text-center text-muted-foreground">
+                                                {student.assignments[listName]
+                                                    ? student.assignments[listName]!.assignedByUserName
+                                                    : '-'}
+                                            </td>
+                                        )}
                                         {canRemove && (
                                             <td className="p-4">
                                                 <button

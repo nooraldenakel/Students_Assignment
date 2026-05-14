@@ -272,7 +272,7 @@ export const useStore = create<AppState>()(
                     }
                 });
 
-                channel.on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, (payload) => {
+                channel.on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, async (payload) => {
                     const s = payload.new as any;
 
                     // Filter incoming events for viewers
@@ -282,14 +282,56 @@ export const useStore = create<AppState>()(
 
                     if (isViewer && payload.eventType !== 'DELETE') {
                         if (!allowedDepartments.includes(s.department)) {
-                            return; // Ignore updates for departments we don't care about
+                            // Student's department changed to one this viewer cannot see.
+                            // Remove them from the viewer's local state so they disappear immediately.
+                            set(state => ({ students: state.students.filter(st => st.id !== s.id) }));
+                            return;
                         }
                     }
 
                     if (payload.eventType === 'INSERT') {
-                        set(state => ({ students: [...state.students, { id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: {} }] }));
+                        set(state => {
+                            if (state.students.some(st => st.id === s.id)) return state;
+                            return { students: [...state.students, { id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: {} }] };
+                        });
                     } else if (payload.eventType === 'UPDATE') {
-                        set(state => ({ students: state.students.map(st => st.id === s.id ? { ...st, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType } : st) }));
+                        const existsInState = get().students.some(st => st.id === s.id);
+
+                        if (existsInState) {
+                            // Student already in state — just update their fields
+                            set(state => ({
+                                students: state.students.map(st => st.id === s.id
+                                    ? { ...st, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType }
+                                    : st
+                                )
+                            }));
+                        } else if (isViewer && allowedDepartments.includes(s.department)) {
+                            // Student was moved INTO this viewer's allowed department but wasn't in local state.
+                            // Fetch their assignments so we can show them immediately without a reload.
+                            const { data: assignRes } = await supabase.from('assignments').select('*').eq('student_id', s.id);
+                            const assignmentsObj: any = {};
+                            (assignRes || []).forEach((a: any) => {
+                                assignmentsObj[a.list_id] = {
+                                    date: a.assigned_date,
+                                    assignedByUserId: a.assigned_by_user_id,
+                                    assignedByUserName: a.assigned_by_user_name
+                                };
+                            });
+                            // Only add if they have at least one assignment (viewer lists only show assigned students)
+                            if (Object.keys(assignmentsObj).length > 0) {
+                                set(state => {
+                                    if (state.students.some(st => st.id === s.id)) return state;
+                                    return {
+                                        students: [...state.students, {
+                                            id: s.id, name: s.name, stage: s.stage,
+                                            department: s.department as Department,
+                                            studyType: s.study_type as StudyType,
+                                            assignments: assignmentsObj
+                                        }]
+                                    };
+                                });
+                            }
+                        }
                     } else if (payload.eventType === 'DELETE') {
                         set(state => ({ students: state.students.filter(st => st.id !== payload.old.id) }));
                     }
