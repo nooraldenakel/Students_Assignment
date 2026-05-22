@@ -89,14 +89,17 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
         const data = filteredStudents.map(s => {
             const meta = s.assignments[listName];
-            return {
+            const row: Record<string, string> = {
                 'الاسم': s.name,
                 'المرحلة الدراسية': s.stage,
                 'القسم': s.department,
                 'نوع الدراسة': s.studyType,
                 'تاريخ المباشرة': meta ? new Date(meta.date).toLocaleDateString() : '-',
-                'مباشر بواسطة': meta ? meta.assignedByUserName : '-'
             };
+            if (currentUser.role !== 'Viewer') {
+                row['مباشر بواسطة'] = meta ? meta.assignedByUserName : '-';
+            }
+            return row;
         });
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
