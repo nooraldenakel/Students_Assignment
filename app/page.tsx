@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useStore, Student, Department, StudyType } from '../lib/store';
 import { useRouter } from 'next/navigation';
-import { Search, Download, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../components/Pagination';
 import Dropdown from '../components/Dropdown';
@@ -13,7 +13,7 @@ export default function MainPage() {
     const {
         currentUser, students,
         l1Enabled, l2Enabled, l3Enabled, l4Enabled,
-        toggleAssignment, updateStudent, clearAssignmentsByList,
+        toggleAssignment, updateStudent, addStudent, clearAssignmentsByList,
         showAlert, isInitialized, isHydrated, departments
     } = useStore();
     const [mounted, setMounted] = useState(false);
@@ -25,11 +25,43 @@ export default function MainPage() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editStage, setEditStage] = useState('');
     const [editDept, setEditDept] = useState<Department>('Art');
-    // Cache of last saved edits so the display is instant regardless of store/realtime timing
     const [savedEdits, setSavedEdits] = useState<Record<string, { stage: string; department: Department }>>({});
 
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState<number | 'All'>(10);
+
+    // FAB visibility on scroll
+    const [fabVisible, setFabVisible] = useState(true);
+    const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Add Student Modal
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [newName, setNewName] = useState('');
+    const [newDept, setNewDept] = useState('');
+    const [newStage, setNewStage] = useState('1');
+    const [newType, setNewType] = useState<StudyType>('صباحي');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Success toast
+    const [toast, setToast] = useState<{ show: boolean; name: string }>({ show: false, name: '' });
+    const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // --- Scroll handler for FAB fade ---
+    useEffect(() => {
+        const mainEl = document.querySelector('main');
+        if (!mainEl) return;
+
+        const handleScroll = () => {
+            setFabVisible(false);
+            if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+            scrollTimerRef.current = setTimeout(() => setFabVisible(true), 400);
+        };
+        mainEl.addEventListener('scroll', handleScroll, { passive: true });
+        return () => {
+            mainEl.removeEventListener('scroll', handleScroll);
+            if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+        };
+    }, []);
 
     useEffect(() => {
         setMounted(true);
@@ -40,16 +72,26 @@ export default function MainPage() {
         }
     }, [currentUser, router]);
 
+    // Reset add form when modal opens
+    useEffect(() => {
+        if (isAddModalOpen) {
+            setNewName('');
+            setNewDept(departments[0] || '');
+            setNewStage('1');
+            setNewType('صباحي');
+        }
+    }, [isAddModalOpen, departments]);
+
     const filteredStudents = useMemo(() => {
+        // Reverse so the most recently added student appears first
         return students.filter((s: Student) => {
-            const matchName = s.name.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchName = (s.name || '').toLowerCase().includes(searchTerm.toLowerCase());
             const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
             const matchType = typeFilter === 'All' || s.studyType === typeFilter;
             return matchName && matchDept && matchType;
-        });
+        }).slice().reverse();
     }, [students, searchTerm, deptFilter, typeFilter]);
 
-    // Reset pagination when filters change
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm, deptFilter, typeFilter]);
@@ -119,10 +161,9 @@ export default function MainPage() {
 
     const handleSaveEdit = (id: string) => {
         const newStage = editStage;
-        const newDept = editDept;
-        // Cache immediately so display is correct before store/realtime updates
-        setSavedEdits(prev => ({ ...prev, [id]: { stage: newStage, department: newDept } }));
-        updateStudent(id, { stage: newStage, department: newDept });
+        const newDeptVal = editDept;
+        setSavedEdits(prev => ({ ...prev, [id]: { stage: newStage, department: newDeptVal } }));
+        updateStudent(id, { stage: newStage, department: newDeptVal });
         setEditingId(null);
     };
 
@@ -130,6 +171,38 @@ export default function MainPage() {
         setEditStage(student.stage);
         setEditDept(student.department);
         setEditingId(student.id);
+    };
+
+    const showToast = (name: string) => {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToast({ show: true, name });
+        toastTimerRef.current = setTimeout(() => {
+            setToast({ show: false, name: '' });
+        }, 3500);
+    };
+
+    const handleAddStudent = async (e: React.FormEvent, continueAdding: boolean) => {
+        e.preventDefault();
+        if (!newName.trim() || !newDept) return;
+        setIsSubmitting(true);
+        const ok = await addStudent({
+            name: newName.trim(),
+            department: newDept as Department,
+            stage: newStage,
+            studyType: newType,
+        });
+        setIsSubmitting(false);
+        if (ok) {
+            const savedName = newName.trim();
+            if (continueAdding) {
+                setNewName('');
+                setNewStage('1');
+                setNewType('صباحي');
+            } else {
+                setIsAddModalOpen(false);
+            }
+            showToast(savedName);
+        }
     };
 
     return (
@@ -369,6 +442,166 @@ export default function MainPage() {
                     onPageSizeChange={setPageSize}
                 />
             </div>
+
+            {/* FAB Button — Admin only */}
+            {isAdmin && (
+                <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    title="إضافة طالب جديد"
+                    style={{
+                        opacity: fabVisible ? 1 : 0,
+                        pointerEvents: fabVisible ? 'auto' : 'none',
+                        transition: 'opacity 0.45s ease, transform 0.2s ease, box-shadow 0.2s ease',
+                    }}
+                    className="fixed bottom-8 right-8 z-50 h-14 px-5 rounded-2xl bg-gradient-to-l from-indigo-600 to-purple-600 text-white shadow-[0_8px_24px_-4px_rgba(99,102,241,0.6)] hover:shadow-[0_12px_32px_-4px_rgba(99,102,241,0.75)] hover:scale-105 active:scale-95 flex items-center gap-3 group"
+                    dir="rtl"
+                >
+                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                        <UserPlus className="w-4 h-4 transition-transform group-hover:rotate-12 duration-200" />
+                    </div>
+                    <span className="font-extrabold text-sm tracking-wide">إضافة طالب</span>
+                </button>
+            )}
+
+            {/* Add Student Modal */}
+            {isAddModalOpen && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                    style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)' }}
+                >
+                    <div
+                        className="bg-white rounded-3xl max-w-lg w-full shadow-2xl relative flex flex-col"
+                        dir="rtl"
+                        style={{ animation: 'modalIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both' }}
+                    >
+                        {/* Gradient header bar */}
+                        <div className="bg-gradient-to-l from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between rounded-t-3xl">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                                    <UserPlus className="w-5 h-5 text-white" />
+                                </div>
+                                <h3 className="text-lg font-black text-white tracking-tight">إضافة طالب جديد</h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsAddModalOpen(false)}
+                                className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/15 hover:bg-white/30 text-white transition-all"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Form body */}
+                        <form
+                            onSubmit={(e) => handleAddStudent(e, false)}
+                            className="px-6 py-6 flex flex-col gap-6 relative pb-10"
+                        >
+                            {/* Full Name */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-sm font-bold text-slate-700">الاسم الكامل للطالب</label>
+                                <input
+                                    type="text"
+                                    required
+                                    autoFocus
+                                    value={newName}
+                                    onChange={(e) => setNewName(e.target.value)}
+                                    placeholder="أدخل الاسم الرباعي للطالب"
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-medium text-slate-800 text-sm"
+                                />
+                            </div>
+
+                            {/* Department — searchable dropdown */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-sm font-bold text-slate-700">القسم (التخصص)</label>
+                                <Dropdown
+                                    value={newDept}
+                                    onChange={setNewDept}
+                                    searchable={true}
+                                    options={departments.map((d: string) => ({ label: d, value: d }))}
+                                />
+                            </div>
+
+                            {/* Stage + Type — two columns */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-sm font-bold text-slate-700">المرحلة الدراسية</label>
+                                    <select
+                                        required
+                                        value={newStage}
+                                        onChange={(e) => setNewStage(e.target.value)}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-bold text-slate-800 text-sm"
+                                    >
+                                        {[1,2,3,4,5,6].map(n => (
+                                            <option key={n} value={String(n)}>المرحلة {n}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-sm font-bold text-slate-700">نوع الدراسة</label>
+                                    <select
+                                        required
+                                        value={newType}
+                                        onChange={(e) => setNewType(e.target.value as StudyType)}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-bold text-slate-800 text-sm"
+                                    >
+                                        <option value="صباحي">صباحي</option>
+                                        <option value="مسائي">مسائي</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-2.5 mt-1">
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="flex-1 py-3 px-4 text-white font-extrabold text-sm rounded-2xl bg-gradient-to-l from-indigo-600 to-purple-600 hover:brightness-110 shadow-md shadow-indigo-500/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+                                >
+                                    {isSubmitting ? (
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    ) : 'حفظ وإغلاق'}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isSubmitting}
+                                    onClick={(e) => handleAddStudent(e as any, true)}
+                                    className="flex-1 py-3 px-4 text-indigo-700 font-extrabold text-sm rounded-2xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+                                >
+                                    {isSubmitting ? (
+                                        <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                    ) : 'حفظ ومتابعة'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Bottom-right success toast — sits above FAB */}
+            <div
+                className="fixed bottom-28 right-8 z-[200] pointer-events-none"
+                style={{
+                    transition: 'opacity 0.4s ease, transform 0.4s ease',
+                    opacity: toast.show ? 1 : 0,
+                    transform: toast.show ? 'translateY(0)' : 'translateY(16px)',
+                }}
+            >
+                <div className="flex items-center gap-3 px-5 py-3.5 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700" dir="rtl">
+                    <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
+                    <div>
+                        <p className="font-extrabold text-sm leading-tight">تمت الإضافة بنجاح</p>
+                        <p className="text-slate-400 text-xs mt-0.5 font-medium truncate max-w-[180px]">{toast.name}</p>
+                    </div>
+                </div>
+            </div>
+
+            <style jsx global>{`
+                @keyframes modalIn {
+                    from { opacity: 0; transform: scale(0.92) translateY(12px); }
+                    to   { opacity: 1; transform: scale(1) translateY(0); }
+                }
+            `}</style>
         </div>
     );
 }

@@ -63,6 +63,7 @@ interface AppState {
     removeDepartment: (name: string) => Promise<void>;
 
     updateStudent: (id: string, updates: Partial<Student>) => Promise<void>;
+    addStudent: (data: Omit<Student, 'id' | 'assignments'>) => Promise<boolean>;
     toggleAssignment: (studentId: string, list: 'L1' | 'L2' | 'L3' | 'L4', user: User) => Promise<void>;
     removeAssignment: (studentId: string, list: 'L1' | 'L2' | 'L3' | 'L4', user: User) => Promise<void>;
     clearAllAssignments: () => Promise<void>;
@@ -580,6 +581,50 @@ export const useStore = create<AppState>()(
                 if (updates.department) dbUpdates.department = updates.department;
                 if (updates.studyType) dbUpdates.study_type = updates.studyType;
                 await supabase.from('students').update(dbUpdates).eq('id', id);
+            },
+
+            addStudent: async (data) => {
+                const currentUser = get().currentUser;
+                if (!currentUser || currentUser.role !== 'Admin') return false;
+
+                const trimmedName = data.name.trim();
+
+                // Generate a proper random UUID
+                const newId: string = typeof crypto !== 'undefined' && crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                        const r = (Math.random() * 16) | 0;
+                        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+                    });
+
+                const newStudent: Student = {
+                    id: newId,
+                    name: trimmedName,
+                    stage: data.stage,
+                    department: data.department,
+                    studyType: data.studyType,
+                    assignments: {}
+                };
+
+                // Optimistically add to local state
+                set(state => ({ students: [...state.students, newStudent] }));
+
+                const { error } = await supabase.from('students').insert({
+                    id: newId,
+                    name: trimmedName,
+                    stage: data.stage,
+                    department: data.department,
+                    study_type: data.studyType
+                });
+
+                if (error) {
+                    // Rollback on failure
+                    set(state => ({ students: state.students.filter(s => s.id !== newId) }));
+                    get().showAlert('خطأ في الإضافة', error.message || 'فشل إضافة الطالب.', 'error');
+                    return false;
+                }
+
+                return true;
             },
 
             toggleAssignment: async (studentId, list, user) => {
