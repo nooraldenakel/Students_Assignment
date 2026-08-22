@@ -12,6 +12,18 @@ export interface User {
     allowedDepartments?: Department[];
 }
 
+export const normalizeArabic = (text: string): string => {
+    if (!text) return '';
+    return text
+        .trim()
+        .toLowerCase()
+        .replace(/[\u064B-\u065F\u0670]/g, '') // Remove tashkeel
+        .replace(/[أإآٱ]/g, 'ا') // Normalize Alefs
+        .replace(/ة/g, 'ه') // Normalize Taa Marbuta
+        .replace(/ى/g, 'ي') // Normalize Alef Maksura
+        .replace(/\s+/g, ' '); // Normalize multiple spaces
+};
+
 export type Department = string;
 export type StudyType = 'صباحي' | 'مسائي';
 

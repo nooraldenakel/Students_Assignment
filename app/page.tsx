@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useStore, Student, Department, StudyType } from '../lib/store';
+import { useStore, Student, Department, StudyType, normalizeArabic } from '../lib/store';
 import { useRouter } from 'next/navigation';
-import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium } from 'lucide-react';
+import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium, UserCheck, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../components/Pagination';
 import Dropdown from '../components/Dropdown';
@@ -53,8 +53,9 @@ export default function MainPage() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [newName, setNewName] = useState('');
     const [newDept, setNewDept] = useState('');
-    const [newStage, setNewStage] = useState('1');
-    const [newType, setNewType] = useState<StudyType>('صباحي');
+    const [newStage, setNewStage] = useState('');
+    const [newType, setNewType] = useState<StudyType | ''>('');
+    const [formSubmitted, setFormSubmitted] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Success toast
@@ -92,15 +93,17 @@ export default function MainPage() {
     useEffect(() => {
         if (isAddModalOpen) {
             setNewName('');
-            setNewDept(departments[0] || '');
-            setNewStage('1');
-            setNewType('صباحي');
+            setNewDept('');
+            setNewStage('');
+            setNewType('');
+            setFormSubmitted(false);
         }
-    }, [isAddModalOpen, departments]);
+    }, [isAddModalOpen]);
 
     const filteredStudents = useMemo(() => {
+        const cleanedSearch = normalizeArabic(searchTerm);
         const baseList = students.filter((s: Student) => {
-            const matchName = (s.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+            const matchName = !cleanedSearch || normalizeArabic(s.name || '').includes(cleanedSearch);
             const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
             const matchStage = stageFilter === 'All' || s.stage === stageFilter;
             return matchName && matchDept && matchStage;
@@ -224,21 +227,33 @@ export default function MainPage() {
 
     const handleAddStudent = async (e: React.FormEvent, continueAdding: boolean) => {
         e.preventDefault();
-        if (!newName.trim() || !newDept) return;
+        setFormSubmitted(true);
+
+        const isNameValid = newName.trim().length > 0;
+        const isDeptValid = newDept.trim().length > 0;
+        const isStageValid = newStage.trim().length > 0;
+        const isTypeValid = newType !== '';
+
+        if (!isNameValid || !isDeptValid || !isStageValid || !isTypeValid) {
+            return;
+        }
+
         setIsSubmitting(true);
         const ok = await addStudent({
             name: newName.trim(),
             department: newDept as Department,
             stage: newStage,
-            studyType: newType,
+            studyType: newType as StudyType,
         });
         setIsSubmitting(false);
         if (ok) {
             const savedName = newName.trim();
+            setFormSubmitted(false);
             if (continueAdding) {
                 setNewName('');
-                setNewStage('1');
-                setNewType('صباحي');
+                setNewDept('');
+                setNewStage('');
+                setNewType('');
             } else {
                 setIsAddModalOpen(false);
             }
@@ -276,7 +291,7 @@ export default function MainPage() {
                     <Search className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                         type="text"
-                        placeholder="البحث عن طلاب..."
+                        placeholder="البحث عن اسم..."
                         className="w-full pr-10 pl-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300 font-medium text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -515,25 +530,63 @@ export default function MainPage() {
                                         <td className="p-4">
                                             <div className="flex gap-1.5 justify-end">
                                                 {(['L1', 'L2', 'L3', 'L4'] as const).map(list => {
-                                                    const isAssigned = !!student.assignments[list];
+                                                    const meta = student.assignments[list];
+                                                    const isAssigned = !!meta;
                                                     const isDisabled = !canAssign ||
                                                         (list === 'L1' && !l1Enabled) ||
                                                         (list === 'L2' && !l2Enabled) ||
                                                         (list === 'L3' && !l3Enabled) ||
                                                         (list === 'L4' && !l4Enabled);
 
+                                                    const dateStr = meta?.date
+                                                        ? new Date(meta.date).toLocaleDateString('ar-IQ', {
+                                                            year: 'numeric',
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                        })
+                                                        : '';
+
                                                     return (
-                                                        <button
-                                                            key={list}
-                                                            disabled={isDisabled && !isAssigned}
-                                                            onClick={() => toggleAssignment(student.id, list, currentUser)}
-                                                            className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xs transition-all border
-                                                            ${isAssigned ? 'bg-indigo-600 text-white border-indigo-600 transform scale-105 shadow-[0_4px_10px_-2px_rgba(79,70,229,0.5)] active:scale-95' : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-400 hover:text-indigo-600 active:scale-95 hover:bg-indigo-50'}
-                                                            ${isDisabled && !isAssigned ? 'opacity-30 cursor-not-allowed grayscale' : ''}
-                                                        `}
-                                                        >
-                                                            {list}
-                                                        </button>
+                                                        <div key={list} className="relative group/btn">
+                                                            <button
+                                                                disabled={isDisabled && !isAssigned}
+                                                                onClick={() => toggleAssignment(student.id, list, currentUser)}
+                                                                title={
+                                                                    isAssigned
+                                                                        ? `Course ${list.replace('L', '')}\nمباشر بواسطة: ${meta?.assignedByUserName || '-'}\nالتاريخ: ${dateStr}`
+                                                                        : `تحديد مباشر لـ Course ${list.replace('L', '')}`
+                                                                }
+                                                                className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xs transition-all border
+                                                                ${isAssigned ? 'bg-indigo-600 text-white border-indigo-600 transform scale-105 shadow-[0_4px_10px_-2px_rgba(79,70,229,0.5)] active:scale-95' : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-400 hover:text-indigo-600 active:scale-95 hover:bg-indigo-50'}
+                                                                ${isDisabled && !isAssigned ? 'opacity-30 cursor-not-allowed grayscale' : ''}
+                                                            `}
+                                                            >
+                                                                {list}
+                                                            </button>
+
+                                                            {/* Rich Hover Card */}
+                                                            {isAssigned && (
+                                                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover/btn:flex flex-col items-center z-50 pointer-events-none whitespace-nowrap animate-in fade-in zoom-in-95 duration-150">
+                                                                    <div className="bg-slate-900/95 text-white backdrop-blur-md px-3 py-2 rounded-xl shadow-xl border border-slate-700/70 text-right min-w-[140px]" dir="rtl">
+                                                                        <div className="flex items-center justify-between gap-2 border-b border-slate-700/80 pb-1 mb-1.5">
+                                                                            <span className="text-[11px] font-black text-indigo-400">Course {list.replace('L', '')}</span>
+                                                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">مباشر ✓</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1.5 text-xs text-slate-200">
+                                                                            <UserCheck className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                                                            <span className="font-bold text-[11px] truncate max-w-[140px]">{meta?.assignedByUserName || 'غير محدد'}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-1">
+                                                                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                                                                            <span className="font-medium text-slate-300">{dateStr}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="w-2 h-2 bg-slate-900 rotate-45 -mt-1 border-r border-b border-slate-700/70"></div>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     );
                                                 })}
                                             </div>
@@ -622,27 +675,43 @@ export default function MainPage() {
                         {/* Form body */}
                         <form
                             onSubmit={(e) => handleAddStudent(e, false)}
-                            className="px-6 py-6 flex flex-col gap-6 relative pb-10"
+                            noValidate
+                            className="px-6 py-6 flex flex-col gap-5 relative pb-10"
                         >
                             {/* Full Name */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-sm font-bold text-slate-700">الاسم الكامل للطالب</label>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-bold text-slate-700">الاسم الكامل للطالب</label>
+                                    {formSubmitted && !newName.trim() && (
+                                        <span className="text-xs font-bold text-rose-500">حقل مطلوب *</span>
+                                    )}
+                                </div>
                                 <input
                                     type="text"
-                                    required
                                     autoFocus
                                     value={newName}
                                     onChange={(e) => setNewName(e.target.value)}
                                     placeholder="أدخل الاسم الرباعي للطالب"
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-medium text-slate-800 text-sm"
+                                    className={`w-full px-4 py-3 border rounded-2xl outline-none focus:ring-2 transition-all font-medium text-slate-800 text-sm ${
+                                        formSubmitted && !newName.trim()
+                                            ? 'border-rose-500 bg-rose-50/20 ring-2 ring-rose-500/20'
+                                            : 'bg-slate-50 border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white'
+                                    }`}
                                 />
                             </div>
 
                             {/* Department — searchable dropdown */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-sm font-bold text-slate-700">القسم (التخصص)</label>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-bold text-slate-700">القسم (التخصص)</label>
+                                    {formSubmitted && !newDept.trim() && (
+                                        <span className="text-xs font-bold text-rose-500">يرجى اختيار القسم *</span>
+                                    )}
+                                </div>
                                 <Dropdown
                                     value={newDept}
+                                    placeholder="-- اختر القسم (التخصص) --"
+                                    hasError={formSubmitted && !newDept.trim()}
                                     onChange={setNewDept}
                                     searchable={true}
                                     options={departments.map((d: string) => ({ label: d, value: d }))}
@@ -652,29 +721,51 @@ export default function MainPage() {
                             {/* Stage + Type — two columns */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-sm font-bold text-slate-700">المرحلة الدراسية</label>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-bold text-slate-700">المرحلة الدراسية</label>
+                                        {formSubmitted && !newStage.trim() && (
+                                            <span className="text-xs font-bold text-rose-500">مطلوب *</span>
+                                        )}
+                                    </div>
                                     <select
-                                        required
                                         value={newStage}
                                         onChange={(e) => setNewStage(e.target.value)}
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-bold text-slate-800 text-sm"
+                                        className={`w-full px-4 py-3 border rounded-2xl outline-none focus:ring-2 transition-all font-bold text-sm ${
+                                            !newStage ? 'text-slate-400 font-normal' : 'text-slate-800'
+                                        } ${
+                                            formSubmitted && !newStage.trim()
+                                                ? 'border-rose-500 bg-rose-50/20 ring-2 ring-rose-500/20'
+                                                : 'bg-slate-50 border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white'
+                                        }`}
                                     >
+                                        <option value="" disabled>-- اختر المرحلة --</option>
                                         {[1,2,3,4,5,6].map(n => (
-                                            <option key={n} value={String(n)}>المرحلة {n}</option>
+                                            <option key={n} value={String(n)} className="text-slate-800 font-bold">المرحلة {n}</option>
                                         ))}
                                     </select>
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-sm font-bold text-slate-700">نوع الدراسة</label>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-bold text-slate-700">نوع الدراسة</label>
+                                        {formSubmitted && !newType && (
+                                            <span className="text-xs font-bold text-rose-500">مطلوب *</span>
+                                        )}
+                                    </div>
                                     <select
-                                        required
                                         value={newType}
                                         onChange={(e) => setNewType(e.target.value as StudyType)}
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all font-bold text-slate-800 text-sm"
+                                        className={`w-full px-4 py-3 border rounded-2xl outline-none focus:ring-2 transition-all font-bold text-sm ${
+                                            !newType ? 'text-slate-400 font-normal' : 'text-slate-800'
+                                        } ${
+                                            formSubmitted && !newType
+                                                ? 'border-rose-500 bg-rose-50/20 ring-2 ring-rose-500/20'
+                                                : 'bg-slate-50 border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white'
+                                        }`}
                                     >
-                                        <option value="صباحي">صباحي</option>
-                                        <option value="مسائي">مسائي</option>
+                                        <option value="" disabled>-- اختر نوع الدراسة --</option>
+                                        <option value="صباحي" className="text-slate-800 font-bold">صباحي</option>
+                                        <option value="مسائي" className="text-slate-800 font-bold">مسائي</option>
                                     </select>
                                 </div>
                             </div>

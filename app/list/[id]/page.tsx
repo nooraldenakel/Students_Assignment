@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useStore, Student, Department } from '../../../lib/store';
+import { useStore, Student, Department, normalizeArabic } from '../../../lib/store';
 import { useRouter } from 'next/navigation';
 import { Trash2, Download, Search, Filter, X, Lock, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium, Calendar, UserCheck, Hash } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -94,8 +94,10 @@ export default function ListPage({ params }: { params: { id: string } }) {
     }, [students, listName, currentUser, deptFilter, stageFilter]);
 
     const filteredStudents = useMemo(() => {
+        const cleanedSearch = normalizeArabic(searchTerm);
         const searched = contextStudents.filter((s: Student) => {
-            return s.name.toLowerCase().includes(searchTerm.toLowerCase());
+            if (!cleanedSearch) return true;
+            return normalizeArabic(s.name || '').includes(cleanedSearch);
         });
 
         return [...searched].sort((a, b) => {
@@ -246,7 +248,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
                     <Search className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                         type="text"
-                        placeholder="البحث عن اسم أو بريد..."
+                        placeholder="البحث عن اسم..."
                         className="w-full pr-10 pl-9 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}

@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { Settings as SettingsIcon, ShieldAlert, Users, Plus, Trash2, X, AlertCircle, ChevronDown, ChevronUp, Database, Download, Upload, AlertTriangle, KeyRound } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Role, Department } from '../../lib/store';
+import { Role, Department, normalizeArabic } from '../../lib/store';
 
 export default function SettingsPage() {
     const router = useRouter();
@@ -119,8 +119,10 @@ export default function SettingsPage() {
     };
 
     const filteredUsers = users.filter(u => {
-        const matchesSearch = u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-            u.email.toLowerCase().includes(userSearch.toLowerCase());
+        const cleanedUserSearch = normalizeArabic(userSearch);
+        const matchesSearch = !cleanedUserSearch ||
+            normalizeArabic(u.name || '').includes(cleanedUserSearch) ||
+            u.email.toLowerCase().trim().includes(cleanedUserSearch);
         const matchesRole = roleFilter === 'All' || u.role === roleFilter;
         return matchesSearch && matchesRole;
     });

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
+import { normalizeArabic } from '../lib/store';
 
 interface DropdownProps {
     value: string;
@@ -9,9 +10,11 @@ interface DropdownProps {
     disabled?: boolean;
     placement?: 'bottom' | 'top';
     searchable?: boolean;
+    placeholder?: string;
+    hasError?: boolean;
 }
 
-export default function Dropdown({ value, onChange, options, className = '', disabled = false, placement = 'bottom', searchable = false }: DropdownProps) {
+export default function Dropdown({ value, onChange, options, className = '', disabled = false, placement = 'bottom', searchable = false, placeholder = '', hasError = false }: DropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);
@@ -37,10 +40,12 @@ export default function Dropdown({ value, onChange, options, className = '', dis
         }
     }, [isOpen, searchable]);
 
-    const selectedLabel = options.find(o => o.value === value)?.label || value;
+    const selectedOption = options.find(o => o.value === value);
+    const selectedLabel = selectedOption ? selectedOption.label : (value || placeholder || '');
 
+    const cleanedQuery = normalizeArabic(searchQuery);
     const filteredOptions = searchable
-        ? options.filter(o => o.label.toLowerCase().includes(searchQuery.toLowerCase()))
+        ? options.filter(o => !cleanedQuery || normalizeArabic(o.label || '').includes(cleanedQuery))
         : options;
 
     return (
@@ -48,10 +53,16 @@ export default function Dropdown({ value, onChange, options, className = '', dis
             <button
                 type="button"
                 disabled={disabled}
-                className={`w-full flex items-center justify-between gap-2 px-4 py-2 bg-white border border-border rounded-lg outline-none focus:ring-2 focus:ring-primary/20 text-sm font-medium transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-medium transition-all ${
+                    hasError
+                        ? 'border-red-500 bg-red-50/10 ring-2 ring-red-500/20'
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span className="truncate">{selectedLabel}</span>
+                <span className={`truncate ${!value && placeholder ? 'text-slate-400 font-normal' : 'text-slate-800 font-medium'}`}>
+                    {selectedLabel}
+                </span>
                 <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? (placement === 'top' ? '-rotate-180' : 'rotate-180') : ''}`} />
             </button>
 
