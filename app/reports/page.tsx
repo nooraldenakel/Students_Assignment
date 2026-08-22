@@ -338,25 +338,25 @@ export default function ReportsPage() {
                     </div>
                 </div>
                 {groupedCalcData.length > 0 && (
-                    <div className="mt-8 overflow-hidden rounded-2xl border border-border">
+                    <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200/80 shadow-xs">
                         <table className="w-full text-right border-collapse text-sm">
-                            <thead className="bg-muted/50 text-muted-foreground font-bold border-b border-border">
+                            <thead className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 text-slate-800 font-extrabold border-b-2 border-slate-200">
                                 <tr>
-                                    <th className="px-6 py-4">{calcType === 'List' ? 'القسم' : 'Course'}</th>
-                                    <th className="px-6 py-4">المباشرين</th>
-                                    <th className="px-6 py-4">النسبة</th>
-                                    <th className="px-6 py-4 w-full">التوزيع</th>
+                                    <th className="px-6 py-4 text-[15px]">{calcType === 'List' ? 'القسم' : 'Course'}</th>
+                                    <th className="px-6 py-4 text-[15px]">المباشرين</th>
+                                    <th className="px-6 py-4 text-[15px]">النسبة</th>
+                                    <th className="px-6 py-4 text-[15px] w-full">التوزيع</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-border">
+                            <tbody className="divide-y divide-slate-100 bg-white">
                                 {groupedCalcData.map((row: any) => (
-                                    <tr key={row.name} className="hover:bg-muted/20 transition-colors">
-                                        <td className="px-6 py-4 font-bold text-foreground">{row.name}</td>
-                                        <td className="px-6 py-4 font-medium">{row.count}</td>
-                                        <td className="px-6 py-4 text-primary font-bold">{row.percent}%</td>
+                                    <tr key={row.name} className="hover:bg-slate-50/80 transition-colors">
+                                        <td className="px-6 py-4 font-bold text-slate-800">{row.name}</td>
+                                        <td className="px-6 py-4 font-medium text-slate-600">{row.count}</td>
+                                        <td className="px-6 py-4 text-indigo-600 font-extrabold">{row.percent}%</td>
                                         <td className="px-6 py-4">
-                                            <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                                                <div className="bg-primary h-full transition-all duration-700 ease-out" style={{ width: `${row.percent}%` }} />
+                                            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                                <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full transition-all duration-700 ease-out rounded-full" style={{ width: `${row.percent}%` }} />
                                             </div>
                                         </td>
                                     </tr>

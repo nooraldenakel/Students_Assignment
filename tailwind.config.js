@@ -20,7 +20,7 @@ module.exports = {
                 border: 'var(--border)',
             },
             fontFamily: {
-                sans: ['Lexend', 'sans-serif'],
+                sans: ['Cairo', 'Plus Jakarta Sans', 'system-ui', 'sans-serif'],
             },
             borderRadius: {
                 lg: '0.5rem',

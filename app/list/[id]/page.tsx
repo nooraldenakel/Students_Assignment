@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useStore, Student, Department } from '../../../lib/store';
 import { useRouter } from 'next/navigation';
-import { Trash2, Download, Search, Filter, X, Lock, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Trash2, Download, Search, Filter, X, Lock, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium, Calendar, UserCheck, Hash } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../../../components/Pagination';
 import Dropdown from '../../../components/Dropdown';
@@ -298,119 +298,151 @@ export default function ListPage({ params }: { params: { id: string } }) {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-border flex flex-col relative z-10 w-full overflow-visible">
-                <div className="overflow-x-auto w-full rounded-t-xl">
-                    <table className="w-full text-right border-collapse" dir="rtl">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 flex flex-col relative z-10 w-full overflow-visible">
+                <div className="overflow-x-auto w-full rounded-t-2xl">
+                    <table className="w-full text-right border-separate border-spacing-0" dir="rtl">
                         <thead>
-                            <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border select-none">
+                            <tr className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 text-slate-800 border-b-2 border-slate-200 select-none">
                                 <th
                                     onClick={() => handleSort('index')}
-                                    className={`p-4 font-extrabold leading-none text-center w-14 cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'index' ? 'text-indigo-600 bg-indigo-50/60' : 'text-slate-400'}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center w-16 cursor-pointer transition-all duration-200 group/th ${sortField === 'index' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب التسلسل"
                                 >
-                                    <div className="flex items-center justify-center gap-1">
-                                        <span>#</span>
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <div className={`p-1 rounded-md transition-colors ${sortField === 'index' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                                            <Hash className="w-3.5 h-3.5" />
+                                        </div>
                                         {sortField === 'index' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600 font-bold" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600 font-bold" />
                                         ) : (
-                                            <ArrowUpDown className="w-3 h-3 text-slate-300 opacity-60" />
+                                            <ArrowUpDown className="w-3 h-3 text-slate-400 group-hover/th:text-indigo-600" />
                                         )}
                                     </div>
                                 </th>
 
                                 <th
                                     onClick={() => handleSort('name')}
-                                    className={`p-4 font-medium leading-none cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'name' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 cursor-pointer transition-all duration-200 group/th ${sortField === 'name' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب اسم الطالب (أ-ي / ي-أ)"
                                 >
-                                    <div className="flex items-center gap-1.5 justify-start">
-                                        <span>اسم الطالب</span>
-                                        {sortField === 'name' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center gap-2 justify-start">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'name' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-indigo-50 text-indigo-600 group-hover/th:bg-indigo-100'}`}>
+                                            <User className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'name' ? 'text-indigo-900' : 'text-slate-800'}`}>اسم الطالب</span>
+                                        <div className={`mr-auto flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'name' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'name' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
                                 <th
                                     onClick={() => handleSort('stage')}
-                                    className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'stage' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'stage' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب المرحلة الدراسية"
                                 >
-                                    <div className="flex items-center justify-center gap-1.5">
-                                        <span>المرحلة الدراسية</span>
-                                        {sortField === 'stage' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'stage' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-50 text-emerald-600 group-hover/th:bg-emerald-100'}`}>
+                                            <GraduationCap className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'stage' ? 'text-indigo-900' : 'text-slate-800'}`}>المرحلة الدراسية</span>
+                                        <div className={`flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'stage' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'stage' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
                                 <th
                                     onClick={() => handleSort('department')}
-                                    className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'department' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'department' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب القسم"
                                 >
-                                    <div className="flex items-center justify-center gap-1.5">
-                                        <span>القسم</span>
-                                        {sortField === 'department' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'department' ? 'bg-blue-600 text-white shadow-sm' : 'bg-blue-50 text-blue-600 group-hover/th:bg-blue-100'}`}>
+                                            <Building2 className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'department' ? 'text-indigo-900' : 'text-slate-800'}`}>القسم</span>
+                                        <div className={`flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'department' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'department' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
                                 <th
                                     onClick={() => handleSort('studyType')}
-                                    className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'studyType' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'studyType' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب نوع الدراسة (صباحي / مسائي)"
                                 >
-                                    <div className="flex items-center justify-center gap-1.5">
-                                        <span>نوع الدراسة</span>
-                                        {sortField === 'studyType' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'studyType' ? 'bg-amber-600 text-white shadow-sm' : 'bg-amber-50 text-amber-600 group-hover/th:bg-amber-100'}`}>
+                                            <SunMedium className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'studyType' ? 'text-indigo-900' : 'text-slate-800'}`}>نوع الدراسة</span>
+                                        <div className={`flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'studyType' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'studyType' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
                                 <th
                                     onClick={() => handleSort('date')}
-                                    className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'date' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'date' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب تاريخ المباشرة (الأحدث / الأقدم)"
                                 >
-                                    <div className="flex items-center justify-center gap-1.5">
-                                        <span>تاريخ المباشرة</span>
-                                        {sortField === 'date' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'date' ? 'bg-purple-600 text-white shadow-sm' : 'bg-purple-50 text-purple-600 group-hover/th:bg-purple-100'}`}>
+                                            <Calendar className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'date' ? 'text-indigo-900' : 'text-slate-800'}`}>تاريخ المباشرة</span>
+                                        <div className={`flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'date' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'date' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
                                 {currentUser.role !== 'Viewer' && (
                                     <th
                                         onClick={() => handleSort('assignedBy')}
-                                        className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'assignedBy' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                        className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'assignedBy' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                         title="ترتيب حسب المباشر"
                                     >
-                                        <div className="flex items-center justify-center gap-1.5">
-                                            <span>مباشر بواسطة</span>
-                                            {sortField === 'assignedBy' ? (
-                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                            ) : (
-                                                <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                            )}
+                                        <div className="flex items-center justify-center gap-2">
+                                            <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'assignedBy' ? 'bg-teal-600 text-white shadow-sm' : 'bg-teal-50 text-teal-600 group-hover/th:bg-teal-100'}`}>
+                                                <UserCheck className="w-4 h-4" />
+                                            </div>
+                                            <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'assignedBy' ? 'text-indigo-900' : 'text-slate-800'}`}>مباشر بواسطة</span>
+                                            <div className={`flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'assignedBy' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                                {sortField === 'assignedBy' ? (
+                                                    sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                                ) : (
+                                                    <ArrowUpDown className="w-3.5 h-3.5" />
+                                                )}
+                                            </div>
                                         </div>
                                     </th>
                                 )}
 
-                                {canRemove && <th className="p-4 font-medium leading-none w-16"></th>}
+                                {canRemove && <th className="p-3.5 md:p-4 border-b-2 border-slate-200 w-16 text-center text-xs font-bold text-slate-400">إجراءات</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-sm">
@@ -432,11 +464,11 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                                 {student.name}
                                             </div>
                                         </td>
-                                        <td className="p-4 text-center text-muted-foreground">{student.stage.replace('Stage', 'المرحلة')}</td>
-                                        <td className="p-4 text-center text-muted-foreground">{student.department}</td>
+                                        <td className="p-4 text-center text-muted-foreground font-medium">{student.stage.replace('Stage', 'المرحلة')}</td>
+                                        <td className="p-4 text-center text-muted-foreground font-medium">{student.department}</td>
                                         <td className="p-4 text-center">
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${student.studyType === 'صباحي' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                                                }`}>
+                                            <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold shadow-xs
+                                            ${student.studyType === 'صباحي' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'}`}>
                                                 {student.studyType}
                                             </span>
                                         </td>

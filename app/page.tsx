@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useStore, Student, Department, StudyType } from '../lib/store';
 import { useRouter } from 'next/navigation';
-import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../components/Pagination';
 import Dropdown from '../components/Dropdown';
@@ -23,7 +23,7 @@ export default function MainPage() {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
-    const [typeFilter, setTypeFilter] = useState<StudyType | 'All'>('All');
+    const [stageFilter, setStageFilter] = useState<string>('All');
 
     const [sortField, setSortField] = useState<SortField | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -102,8 +102,8 @@ export default function MainPage() {
         const baseList = students.filter((s: Student) => {
             const matchName = (s.name || '').toLowerCase().includes(searchTerm.toLowerCase());
             const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
-            const matchType = typeFilter === 'All' || s.studyType === typeFilter;
-            return matchName && matchDept && matchType;
+            const matchStage = stageFilter === 'All' || s.stage === stageFilter;
+            return matchName && matchDept && matchStage;
         });
 
         if (!sortField) {
@@ -128,11 +128,11 @@ export default function MainPage() {
             }
             return sortDirection === 'asc' ? comparison : -comparison;
         });
-    }, [students, searchTerm, deptFilter, typeFilter, sortField, sortDirection]);
+    }, [students, searchTerm, deptFilter, stageFilter, sortField, sortDirection]);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, deptFilter, typeFilter]);
+    }, [searchTerm, deptFilter, stageFilter]);
 
     const paginatedStudents = useMemo(() => {
         if (pageSize === 'All') return filteredStudents;
@@ -179,22 +179,25 @@ export default function MainPage() {
     const canAssign = currentUser.role === 'Admin' || currentUser.role === 'Operator';
     const isAdmin = currentUser.role === 'Admin';
 
-    const exportUnassignedToExcel = () => {
-        const unassigned = filteredStudents.filter(s => Object.keys(s.assignments).length === 0);
-        if (unassigned.length === 0) {
-            showAlert('فشل التصدير', 'لا يوجد طلاب غير مباشرين يطابقون معاييرك.', 'error');
+    const exportStudentsToExcel = () => {
+        if (filteredStudents.length === 0) {
+            showAlert('فشل التصدير', 'لا يوجد طلاب يطابقون معايير التصفية الحالية للتصدير.', 'error');
             return;
         }
-        const data = unassigned.map(s => ({
-            'الاسم': s.name,
-            'المرحلة الدراسية': s.stage,
-            'القسم': s.department,
-            'نوع الدراسة': s.studyType
-        }));
+        const data = filteredStudents.map(s => {
+            const assignedLists = Object.keys(s.assignments).map(l => l.replace('L', 'Course ')).join(', ') || 'غير مباشر';
+            return {
+                'الاسم': s.name,
+                'المرحلة الدراسية': s.stage.replace('Stage', 'المرحلة'),
+                'القسم': s.department,
+                'نوع الدراسة': s.studyType,
+                'المباشرات': assignedLists
+            };
+        });
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "غير مباشر");
-        XLSX.writeFile(workbook, "unassigned_filtered_students.xlsx");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "الطلاب المفلترين");
+        XLSX.writeFile(workbook, "filtered_students.xlsx");
     };
 
     const handleSaveEdit = (id: string) => {
@@ -302,21 +305,24 @@ export default function MainPage() {
                         />
                     </div>
 
-                    <div className="w-[140px]">
+                    <div className="w-[140px] sm:w-[160px]">
                         <Dropdown
-                            value={typeFilter}
-                            onChange={(val) => setTypeFilter(val as any)}
+                            value={stageFilter}
+                            onChange={(val) => setStageFilter(val)}
                             options={[
-                                { label: 'جميع الأنواع', value: 'All' },
-                                { label: 'صباحي', value: 'صباحي' },
-                                { label: 'مسائي', value: 'مسائي' }
+                                { label: 'جميع المراحل', value: 'All' },
+                                ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).sort().map(stage => ({
+                                    label: stage.startsWith('المرحلة') ? stage : stage.includes('Stage') ? stage.replace('Stage', 'المرحلة') : `المرحلة ${stage}`,
+                                    value: stage
+                                }))
                             ]}
                         />
                     </div>
 
                     <button
-                        onClick={exportUnassignedToExcel}
+                        onClick={exportStudentsToExcel}
                         className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all duration-300 transform active:scale-95 text-sm font-bold shadow-[0_5px_15px_-5px_rgba(79,70,229,0.5)] hover:shadow-[0_10px_20px_-5px_rgba(79,70,229,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                        title="تصدير الطلاب المفلترين إلى Excel"
                         disabled={filteredStudents.length === 0}
                     >
                         <Download className="w-4 h-4" />
@@ -325,74 +331,99 @@ export default function MainPage() {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-border flex flex-col relative z-10 overflow-visible">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 flex flex-col relative z-10 overflow-visible">
                 <div className="overflow-x-auto rounded-t-2xl w-full">
                     <table className="w-full text-right border-separate border-spacing-0" dir="rtl">
                         <thead>
-                            <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border select-none">
+                            <tr className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 text-slate-800 border-b-2 border-slate-200 select-none">
                                 <th
                                     onClick={() => handleSort('name')}
-                                    className={`p-4 border-b border-border cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'name' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 cursor-pointer transition-all duration-200 group/th ${sortField === 'name' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب اسم الطالب (أ-ي / ي-أ)"
                                 >
-                                    <div className="flex items-center gap-1.5 justify-start">
-                                        <span>اسم الطالب</span>
-                                        {sortField === 'name' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center gap-2 justify-start">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'name' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-indigo-50 text-indigo-600 group-hover/th:bg-indigo-100'}`}>
+                                            <User className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'name' ? 'text-indigo-900' : 'text-slate-800'}`}>اسم الطالب</span>
+                                        <div className={`mr-auto flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'name' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'name' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
                                 <th
                                     onClick={() => handleSort('stage')}
-                                    className={`p-4 border-b border-border text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'stage' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'stage' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب المرحلة الدراسية"
                                 >
-                                    <div className="flex items-center justify-center gap-1.5">
-                                        <span>المرحلة الدراسية</span>
-                                        {sortField === 'stage' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'stage' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-50 text-emerald-600 group-hover/th:bg-emerald-100'}`}>
+                                            <GraduationCap className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'stage' ? 'text-indigo-900' : 'text-slate-800'}`}>المرحلة الدراسية</span>
+                                        <div className={`flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'stage' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'stage' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
                                 <th
                                     onClick={() => handleSort('department')}
-                                    className={`p-4 border-b border-border text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'department' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'department' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب القسم"
                                 >
-                                    <div className="flex items-center justify-center gap-1.5">
-                                        <span>القسم</span>
-                                        {sortField === 'department' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'department' ? 'bg-blue-600 text-white shadow-sm' : 'bg-blue-50 text-blue-600 group-hover/th:bg-blue-100'}`}>
+                                            <Building2 className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'department' ? 'text-indigo-900' : 'text-slate-800'}`}>القسم</span>
+                                        <div className={`flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'department' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'department' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
                                 <th
                                     onClick={() => handleSort('studyType')}
-                                    className={`p-4 border-b border-border text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'studyType' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'studyType' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
                                     title="ترتيب حسب نوع الدراسة"
                                 >
-                                    <div className="flex items-center justify-center gap-1.5">
-                                        <span>نوع الدراسة</span>
-                                        {sortField === 'studyType' ? (
-                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
-                                        ) : (
-                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
-                                        )}
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${sortField === 'studyType' ? 'bg-amber-600 text-white shadow-sm' : 'bg-amber-50 text-amber-600 group-hover/th:bg-amber-100'}`}>
+                                            <SunMedium className="w-4 h-4" />
+                                        </div>
+                                        <span className={`text-sm md:text-[15px] font-extrabold ${sortField === 'studyType' ? 'text-indigo-900' : 'text-slate-800'}`}>نوع الدراسة</span>
+                                        <div className={`flex items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-bold transition-all ${sortField === 'studyType' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 group-hover/th:text-indigo-600 group-hover/th:bg-white'}`}>
+                                            {sortField === 'studyType' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5" />
+                                            )}
+                                        </div>
                                     </div>
                                 </th>
 
-                                <th className="p-4 border-b border-border text-right w-[240px]">
-                                    <div className="flex flex-col gap-2 items-end">
-                                        {isAdmin && <span className="text-indigo-600 font-extrabold pb-1">ازالة الكل</span>}
+                                <th className="p-3.5 md:p-4 border-b-2 border-slate-200 text-right w-[240px]">
+                                    <div className="flex flex-col gap-1.5 items-end">
+                                        {isAdmin && (
+                                            <div className="flex items-center justify-between w-full pb-1">
+                                                <span className="text-xs font-black text-rose-600 uppercase tracking-wider">ازالة المباشرة</span>
+                                                <span className="text-[11px] font-bold text-slate-400">Course 1-4</span>
+                                            </div>
+                                        )}
                                         {isAdmin && (
                                             <div className="flex gap-1.5 justify-end w-full">
                                                 {(['L1', 'L2', 'L3', 'L4'] as const).map(list => {
@@ -409,23 +440,26 @@ export default function MainPage() {
                                                                     () => clearAssignmentsByList(list)
                                                                 );
                                                             }}
-                                                            title={`مسح كل ${list}`}
-                                                            className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center font-extrabold transition-all active:scale-95 border
+                                                            title={`مسح كل طلاب Course ${list.replace('L', '')}`}
+                                                            className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center font-extrabold transition-all active:scale-95 border shadow-2xs
                                                             ${hasAssignments
-                                                                    ? 'bg-red-50 hover:bg-red-600 text-red-600 hover:text-white border-red-200 hover:shadow-[0_4px_10px_-2px_rgba(239,68,68,0.5)]'
-                                                                    : 'bg-white text-slate-300 border-slate-100 cursor-not-allowed opacity-50 grayscale'}
+                                                                    ? 'bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border-rose-200 hover:shadow-[0_4px_12px_-2px_rgba(225,29,72,0.5)] cursor-pointer'
+                                                                    : 'bg-slate-50 text-slate-300 border-slate-200/60 cursor-not-allowed opacity-40 grayscale'}
                                                         `}
                                                         >
-                                                            <span className="text-[10px] leading-none mb-0.5 uppercase">{list}</span>
-                                                            <Trash2 className="w-3 h-3" />
+                                                            <span className="text-[10px] leading-none mb-0.5 uppercase font-black">{list}</span>
+                                                            <Trash2 className="w-3.5 h-3.5" />
                                                         </button>
                                                     );
                                                 })}
                                             </div>
                                         )}
+                                        {!isAdmin && (
+                                            <span className="text-sm font-extrabold text-slate-700">المباشرات</span>
+                                        )}
                                     </div>
                                 </th>
-                                {canEdit && <th className="p-4 border-b border-border w-16"></th>}
+                                {canEdit && <th className="p-3.5 md:p-4 border-b-2 border-slate-200 w-16 text-center text-xs font-bold text-slate-400">إجراءات</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-sm">
@@ -473,8 +507,8 @@ export default function MainPage() {
                                             </>
                                         )}
                                         <td className="p-4 text-center">
-                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight shadow-sm
-                                            ${student.studyType === 'صباحي' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-purple-50 text-purple-600 border border-purple-100'}`}>
+                                            <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold shadow-xs
+                                            ${student.studyType === 'صباحي' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'}`}>
                                                 {student.studyType}
                                             </span>
                                         </td>
