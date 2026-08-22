@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 
 export function Sidebar() {
     const pathname = usePathname();
-    const { currentUser, logout } = useStore();
+    const { currentUser, logout, l1Enabled, l2Enabled, l3Enabled, l4Enabled, showAlert } = useStore();
     const [mounted, setMounted] = useState(false);
 
     // Auto-collapse based on window size initially, or persist in localStorage if desired.
@@ -36,6 +36,13 @@ export function Sidebar() {
     if (pathname === '/login') return null;
 
     const expanded = !isCollapsed || isHovered;
+
+    const courses = [
+        { href: '/list/l1', label: 'Course 1', enabled: l1Enabled },
+        { href: '/list/l2', label: 'Course 2', enabled: l2Enabled },
+        { href: '/list/l3', label: 'Course 3', enabled: l3Enabled },
+        { href: '/list/l4', label: 'Course 4', enabled: l4Enabled },
+    ];
 
     return (
         <>
@@ -91,10 +98,26 @@ export function Sidebar() {
                     {currentUser?.role !== 'Viewer' && (
                         <NavItem href="/" icon={<Users />} label="Main List" active={pathname === '/'} expanded={expanded} />
                     )}
-                    <NavItem href="/list/l1" icon={<List />} label="Course 1" active={pathname === '/list/l1'} expanded={expanded} />
-                    <NavItem href="/list/l2" icon={<List />} label="Course 2" active={pathname === '/list/l2'} expanded={expanded} />
-                    <NavItem href="/list/l3" icon={<List />} label="Course 3" active={pathname === '/list/l3'} expanded={expanded} />
-                    <NavItem href="/list/l4" icon={<List />} label="Course 4" active={pathname === '/list/l4'} expanded={expanded} />
+                    {courses.map(course => {
+                        const isCourseDisabled = currentUser?.role !== 'Admin' && !course.enabled;
+                        return (
+                            <NavItem
+                                key={course.href}
+                                href={course.href}
+                                icon={<List />}
+                                label={course.label}
+                                active={pathname === course.href}
+                                expanded={expanded}
+                                disabled={isCourseDisabled}
+                                onClick={(e) => {
+                                    if (isCourseDisabled) {
+                                        e.preventDefault();
+                                        showAlert('تنبيه', 'قائمة المباشرين هذه غير متاحة حاليا', 'error');
+                                    }
+                                }}
+                            />
+                        );
+                    })}
 
                     {currentUser?.role === 'Admin' && (
                         <>
@@ -125,14 +148,33 @@ export function Sidebar() {
     );
 }
 
-function NavItem({ href, icon, label, active, expanded }: { href: string; icon: React.ReactNode; label: string; active: boolean; expanded: boolean }) {
+function NavItem({
+    href,
+    icon,
+    label,
+    active,
+    expanded,
+    disabled = false,
+    onClick
+}: {
+    href: string;
+    icon: React.ReactNode;
+    label: string;
+    active: boolean;
+    expanded: boolean;
+    disabled?: boolean;
+    onClick?: (e: React.MouseEvent) => void;
+}) {
     return (
         <Link
-            href={href}
+            href={disabled ? '#' : href}
+            onClick={onClick}
             title={!expanded ? label : undefined}
             className={`flex items-center gap-3 py-3 rounded-xl text-sm font-bold transition-all duration-200 overflow-hidden ${active
                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'
+                : disabled
+                    ? 'text-slate-400 hover:bg-slate-50 hover:text-slate-500 cursor-pointer'
+                    : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'
                 } ${expanded ? 'px-4 justify-start hover:-translate-y-[1px]' : 'px-0 justify-center'}`}
         >
             <span className="w-5 h-5 flex-shrink-0">{icon}</span>

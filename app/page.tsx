@@ -3,10 +3,13 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useStore, Student, Department, StudyType } from '../lib/store';
 import { useRouter } from 'next/navigation';
-import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2 } from 'lucide-react';
+import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../components/Pagination';
 import Dropdown from '../components/Dropdown';
+
+type SortField = 'name' | 'stage' | 'department' | 'studyType';
+type SortDirection = 'asc' | 'desc';
 
 export default function MainPage() {
     const router = useRouter();
@@ -21,6 +24,18 @@ export default function MainPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
     const [typeFilter, setTypeFilter] = useState<StudyType | 'All'>('All');
+
+    const [sortField, setSortField] = useState<SortField | null>(null);
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortField(field);
+            setSortDirection('asc');
+        }
+    };
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editStage, setEditStage] = useState('');
@@ -68,9 +83,10 @@ export default function MainPage() {
         if (!currentUser) {
             router.push('/login');
         } else if (currentUser.role === 'Viewer') {
-            router.push('/list/l1');
+            const firstEnabled = l1Enabled ? 'l1' : l2Enabled ? 'l2' : l3Enabled ? 'l3' : l4Enabled ? 'l4' : 'l1';
+            router.push(`/list/${firstEnabled}`);
         }
-    }, [currentUser, router]);
+    }, [currentUser, router, l1Enabled, l2Enabled, l3Enabled, l4Enabled]);
 
     // Reset add form when modal opens
     useEffect(() => {
@@ -83,14 +99,36 @@ export default function MainPage() {
     }, [isAddModalOpen, departments]);
 
     const filteredStudents = useMemo(() => {
-        // Reverse so the most recently added student appears first
-        return students.filter((s: Student) => {
+        const baseList = students.filter((s: Student) => {
             const matchName = (s.name || '').toLowerCase().includes(searchTerm.toLowerCase());
             const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
             const matchType = typeFilter === 'All' || s.studyType === typeFilter;
             return matchName && matchDept && matchType;
-        }).slice().reverse();
-    }, [students, searchTerm, deptFilter, typeFilter]);
+        });
+
+        if (!sortField) {
+            return baseList.slice().reverse();
+        }
+
+        return baseList.slice().sort((a, b) => {
+            let comparison = 0;
+            switch (sortField) {
+                case 'name':
+                    comparison = (a.name || '').localeCompare(b.name || '', 'ar', { sensitivity: 'base' });
+                    break;
+                case 'stage':
+                    comparison = (a.stage || '').localeCompare(b.stage || '', 'ar', { numeric: true });
+                    break;
+                case 'department':
+                    comparison = (a.department || '').localeCompare(b.department || '', 'ar');
+                    break;
+                case 'studyType':
+                    comparison = (a.studyType || '').localeCompare(b.studyType || '', 'ar');
+                    break;
+            }
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    }, [students, searchTerm, deptFilter, typeFilter, sortField, sortDirection]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -291,11 +329,67 @@ export default function MainPage() {
                 <div className="overflow-x-auto rounded-t-2xl w-full">
                     <table className="w-full text-right border-separate border-spacing-0" dir="rtl">
                         <thead>
-                            <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border">
-                                <th className="p-4 border-b border-border">اسم الطالب</th>
-                                <th className="p-4 border-b border-border text-center">المرحلة الدراسية</th>
-                                <th className="p-4 border-b border-border text-center">القسم</th>
-                                <th className="p-4 border-b border-border text-center">نوع الدراسة</th>
+                            <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border select-none">
+                                <th
+                                    onClick={() => handleSort('name')}
+                                    className={`p-4 border-b border-border cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'name' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب اسم الطالب (أ-ي / ي-أ)"
+                                >
+                                    <div className="flex items-center gap-1.5 justify-start">
+                                        <span>اسم الطالب</span>
+                                        {sortField === 'name' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                <th
+                                    onClick={() => handleSort('stage')}
+                                    className={`p-4 border-b border-border text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'stage' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب المرحلة الدراسية"
+                                >
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <span>المرحلة الدراسية</span>
+                                        {sortField === 'stage' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                <th
+                                    onClick={() => handleSort('department')}
+                                    className={`p-4 border-b border-border text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'department' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب القسم"
+                                >
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <span>القسم</span>
+                                        {sortField === 'department' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                <th
+                                    onClick={() => handleSort('studyType')}
+                                    className={`p-4 border-b border-border text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'studyType' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب نوع الدراسة"
+                                >
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <span>نوع الدراسة</span>
+                                        {sortField === 'studyType' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
                                 <th className="p-4 border-b border-border text-right w-[240px]">
                                     <div className="flex flex-col gap-2 items-end">
                                         {isAdmin && <span className="text-indigo-600 font-extrabold pb-1">ازالة الكل</span>}

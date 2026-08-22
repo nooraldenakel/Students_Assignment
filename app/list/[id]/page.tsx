@@ -3,17 +3,32 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useStore, Student, Department } from '../../../lib/store';
 import { useRouter } from 'next/navigation';
-import { Trash2, Download, Search, Filter, X } from 'lucide-react';
+import { Trash2, Download, Search, Filter, X, Lock, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../../../components/Pagination';
 import Dropdown from '../../../components/Dropdown';
+
+type SortField = 'index' | 'name' | 'stage' | 'department' | 'studyType' | 'date' | 'assignedBy';
+type SortDirection = 'asc' | 'desc';
 
 export default function ListPage({ params }: { params: { id: string } }) {
     const router = useRouter();
     const { id } = params;
     const listName = id.toUpperCase() as 'L1' | 'L2' | 'L3' | 'L4';
 
-    const { currentUser, students, departments, removeAssignment, showAlert, isInitialized, isHydrated } = useStore();
+    const {
+        currentUser,
+        students,
+        departments,
+        l1Enabled,
+        l2Enabled,
+        l3Enabled,
+        l4Enabled,
+        removeAssignment,
+        showAlert,
+        isInitialized,
+        isHydrated
+    } = useStore();
     const [mounted, setMounted] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
@@ -21,6 +36,34 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState<number | 'All'>(10);
+
+    const [sortField, setSortField] = useState<SortField>('date');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortField(field);
+            setSortDirection('asc');
+        }
+    };
+
+    const isCourseEnabled = useMemo(() => {
+        if (listName === 'L1') return l1Enabled;
+        if (listName === 'L2') return l2Enabled;
+        if (listName === 'L3') return l3Enabled;
+        if (listName === 'L4') return l4Enabled;
+        return true;
+    }, [listName, l1Enabled, l2Enabled, l3Enabled, l4Enabled]);
+
+    const firstEnabledCourse = useMemo(() => {
+        if (l1Enabled) return { id: 'l1', label: 'Course 1' };
+        if (l2Enabled) return { id: 'l2', label: 'Course 2' };
+        if (l3Enabled) return { id: 'l3', label: 'Course 3' };
+        if (l4Enabled) return { id: 'l4', label: 'Course 4' };
+        return null;
+    }, [l1Enabled, l2Enabled, l3Enabled, l4Enabled]);
 
     useEffect(() => {
         setMounted(true);
@@ -55,13 +98,45 @@ export default function ListPage({ params }: { params: { id: string } }) {
             return s.name.toLowerCase().includes(searchTerm.toLowerCase());
         });
 
-        // Re-sort searched array to show newest assignments at the top for display
-        return searched.sort((a, b) => {
-            const dateA = new Date(a.assignments[listName]!.date).getTime();
-            const dateB = new Date(b.assignments[listName]!.date).getTime();
-            return dateB - dateA;
+        return [...searched].sort((a, b) => {
+            let comparison = 0;
+            switch (sortField) {
+                case 'name':
+                    comparison = (a.name || '').localeCompare(b.name || '', 'ar', { sensitivity: 'base' });
+                    break;
+                case 'stage':
+                    comparison = (a.stage || '').localeCompare(b.stage || '', 'ar', { numeric: true });
+                    break;
+                case 'department':
+                    comparison = (a.department || '').localeCompare(b.department || '', 'ar');
+                    break;
+                case 'studyType':
+                    comparison = (a.studyType || '').localeCompare(b.studyType || '', 'ar');
+                    break;
+                case 'date': {
+                    const dateA = a.assignments[listName]?.date ? new Date(a.assignments[listName]!.date).getTime() : 0;
+                    const dateB = b.assignments[listName]?.date ? new Date(b.assignments[listName]!.date).getTime() : 0;
+                    comparison = dateA - dateB;
+                    break;
+                }
+                case 'assignedBy': {
+                    const byA = a.assignments[listName]?.assignedByUserName || '';
+                    const byB = b.assignments[listName]?.assignedByUserName || '';
+                    comparison = byA.localeCompare(byB, 'ar');
+                    break;
+                }
+                case 'index': {
+                    const origA = contextStudents.findIndex(s => s.id === a.id);
+                    const origB = contextStudents.findIndex(s => s.id === b.id);
+                    comparison = origA - origB;
+                    break;
+                }
+                default:
+                    comparison = 0;
+            }
+            return sortDirection === 'asc' ? comparison : -comparison;
         });
-    }, [contextStudents, searchTerm, listName]);
+    }, [contextStudents, searchTerm, listName, sortField, sortDirection]);
 
     // Reset pagination when filters change
     useEffect(() => {
@@ -80,6 +155,43 @@ export default function ListPage({ params }: { params: { id: string } }) {
         </div>
     );
     if (!currentUser) return null;
+
+    // Block non-admins from viewing disabled courses
+    if (!isCourseEnabled && currentUser.role !== 'Admin') {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+                <div className="bg-white p-8 md:p-12 rounded-3xl border border-slate-200 shadow-xl max-w-lg w-full flex flex-col items-center animate-in fade-in duration-300">
+                    <div className="w-20 h-20 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 mb-6 shadow-inner">
+                        <Lock className="w-10 h-10" />
+                    </div>
+
+                    <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-black rounded-full uppercase tracking-wider mb-3">
+                        Course {listName.replace('L', '')} غير مفعّل
+                    </span>
+
+                    <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight mb-2">
+                        قائمة المباشرين هذه غير متاحة حالياً
+                    </h2>
+
+                    <p className="text-sm font-medium text-slate-600 leading-relaxed mb-6" dir="rtl">
+                        يرجى التواصل مع مسؤول النظام لتفعيل هذا المسار.
+                        <span className="text-xs text-slate-400 mt-2 block font-normal" dir="ltr">
+                            This Course is not enabled yet, contact with admin to enable it.
+                        </span>
+                    </p>
+
+                    {firstEnabledCourse && (
+                        <button
+                            onClick={() => router.push(`/list/${firstEnabledCourse.id}`)}
+                            className="w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all duration-200 shadow-md shadow-indigo-600/30 hover:shadow-lg flex items-center justify-center gap-2"
+                        >
+                            الانتقال إلى {firstEnabledCourse.label} المتاح
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     const exportListToExcel = () => {
         if (filteredStudents.length === 0) {
@@ -190,14 +302,114 @@ export default function ListPage({ params }: { params: { id: string } }) {
                 <div className="overflow-x-auto w-full rounded-t-xl">
                     <table className="w-full text-right border-collapse" dir="rtl">
                         <thead>
-                            <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border">
-                                <th className="p-4 font-extrabold leading-none text-center w-12 text-slate-400">#</th>
-                                <th className="p-4 font-medium leading-none">اسم الطالب</th>
-                                <th className="p-4 font-medium leading-none text-center">المرحلة الدراسية</th>
-                                <th className="p-4 font-medium leading-none text-center">القسم</th>
-                                <th className="p-4 font-medium leading-none text-center">نوع الدراسة</th>
-                                <th className="p-4 font-medium leading-none text-center">تاريخ المباشرة</th>
-                                {currentUser.role !== 'Viewer' && <th className="p-4 font-medium leading-none text-center">مباشر بواسطة</th>}
+                            <tr className="bg-slate-50 text-muted-foreground text-sm font-medium border-b border-border select-none">
+                                <th
+                                    onClick={() => handleSort('index')}
+                                    className={`p-4 font-extrabold leading-none text-center w-14 cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'index' ? 'text-indigo-600 bg-indigo-50/60' : 'text-slate-400'}`}
+                                    title="ترتيب حسب التسلسل"
+                                >
+                                    <div className="flex items-center justify-center gap-1">
+                                        <span>#</span>
+                                        {sortField === 'index' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3 h-3 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                <th
+                                    onClick={() => handleSort('name')}
+                                    className={`p-4 font-medium leading-none cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'name' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب اسم الطالب (أ-ي / ي-أ)"
+                                >
+                                    <div className="flex items-center gap-1.5 justify-start">
+                                        <span>اسم الطالب</span>
+                                        {sortField === 'name' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                <th
+                                    onClick={() => handleSort('stage')}
+                                    className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'stage' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب المرحلة الدراسية"
+                                >
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <span>المرحلة الدراسية</span>
+                                        {sortField === 'stage' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                <th
+                                    onClick={() => handleSort('department')}
+                                    className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'department' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب القسم"
+                                >
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <span>القسم</span>
+                                        {sortField === 'department' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                <th
+                                    onClick={() => handleSort('studyType')}
+                                    className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'studyType' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب نوع الدراسة (صباحي / مسائي)"
+                                >
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <span>نوع الدراسة</span>
+                                        {sortField === 'studyType' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                <th
+                                    onClick={() => handleSort('date')}
+                                    className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'date' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                    title="ترتيب حسب تاريخ المباشرة (الأحدث / الأقدم)"
+                                >
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <span>تاريخ المباشرة</span>
+                                        {sortField === 'date' ? (
+                                            sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                        ) : (
+                                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                        )}
+                                    </div>
+                                </th>
+
+                                {currentUser.role !== 'Viewer' && (
+                                    <th
+                                        onClick={() => handleSort('assignedBy')}
+                                        className={`p-4 font-medium leading-none text-center cursor-pointer hover:bg-slate-100/80 hover:text-indigo-600 transition-colors ${sortField === 'assignedBy' ? 'text-indigo-600 font-bold bg-indigo-50/60' : ''}`}
+                                        title="ترتيب حسب المباشر"
+                                    >
+                                        <div className="flex items-center justify-center gap-1.5">
+                                            <span>مباشر بواسطة</span>
+                                            {sortField === 'assignedBy' ? (
+                                                sortDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600" />
+                                            ) : (
+                                                <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-60" />
+                                            )}
+                                        </div>
+                                    </th>
+                                )}
+
                                 {canRemove && <th className="p-4 font-medium leading-none w-16"></th>}
                             </tr>
                         </thead>
