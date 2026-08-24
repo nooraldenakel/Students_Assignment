@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Dropdown from './Dropdown';
 
-type PageSizeOption = 10 | 20 | 30 | 50 | 75 | 100 | 200 | 'All' | 'Custom';
+type PageSizeOption = 10 | 20 | 30 | 50 | 75 | 100 | 200 | 'Custom';
 
 interface PaginationProps {
     currentPage: number;
     totalItems: number;
-    pageSize: number | 'All';
+    pageSize: number;
     onPageChange: (page: number) => void;
-    onPageSizeChange: (size: number | 'All') => void;
+    onPageSizeChange: (size: number) => void;
 }
 
 export default function Pagination({
@@ -22,7 +22,7 @@ export default function Pagination({
     const [customSize, setCustomSize] = useState<string>('');
     const [isCustom, setIsCustom] = useState(false);
 
-    const actualPageSize = pageSize === 'All' ? totalItems : pageSize;
+    const actualPageSize = typeof pageSize === 'number' ? pageSize : 10;
     const totalPages = actualPageSize > 0 ? Math.ceil(totalItems / actualPageSize) : 1;
 
     const PRESET_PAGE_SIZES = [10, 20, 30, 50, 75, 100, 200];
@@ -54,9 +54,6 @@ export default function Pagination({
         if (val === 'Custom') {
             setIsCustom(true);
             setCustomSize('');
-        } else if (val === 'All') {
-            setIsCustom(false);
-            onPageSizeChange('All');
         } else {
             setIsCustom(false);
             onPageSizeChange(parseInt(val, 10));
@@ -66,18 +63,18 @@ export default function Pagination({
 
     const handleCustomSizeSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const parsed = parseInt(customSize, 10);
+        let parsed = parseInt(customSize, 10);
         if (!isNaN(parsed) && parsed > 0) {
+            if (parsed > 300) parsed = 300;
             onPageSizeChange(parsed);
             onPageChange(1);
         }
     };
 
-    const displaySizeValue = isCustom ? 'Custom' : (pageSize === 'All' ? 'All' : pageSize.toString());
+    const displaySizeValue = isCustom ? 'Custom' : pageSize.toString();
 
     const dropdownOptions = [
         ...availableSizes.map(s => ({ label: s.toString(), value: s.toString() })),
-        { label: 'الكل', value: 'All' },
         { label: 'مخصص...', value: 'Custom' }
     ];
 
@@ -99,12 +96,27 @@ export default function Pagination({
                         <input
                             type="number"
                             min="1"
+                            max="300"
                             value={customSize}
-                            onChange={(e) => setCustomSize(e.target.value)}
-                            placeholder="الكمية"
-                            className="w-16 border border-border rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                    setCustomSize('');
+                                    return;
+                                }
+                                const num = parseInt(val, 10);
+                                if (!isNaN(num)) {
+                                    if (num > 300) {
+                                        setCustomSize('300');
+                                    } else if (num >= 0) {
+                                        setCustomSize(val);
+                                    }
+                                }
+                            }}
+                            placeholder="1-300"
+                            className="w-20 border border-border rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-primary/20 text-sm"
                         />
-                        <button type="submit" className="text-xs bg-primary text-white px-2 py-1 rounded hover:bg-primary/90">
+                        <button type="submit" className="text-xs bg-primary text-white px-2.5 py-1 rounded-md hover:bg-primary/90 font-medium transition-colors">
                             تعيين
                         </button>
                     </form>

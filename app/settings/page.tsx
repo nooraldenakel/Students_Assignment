@@ -486,7 +486,7 @@ export default function SettingsPage() {
                         </div>
                         {isUsersOpen && (
                             <>
-                                <div className="flex flex-col sm:flex-row gap-4 mb-4" dir="rtl">
+                                <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm py-2 flex flex-col sm:flex-row gap-4 mb-4" dir="rtl">
                                     <div className="flex-1 relative">
                                         <Users className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input

@@ -37,7 +37,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
     const [studyTypeFilter, setStudyTypeFilter] = useState<StudyType | 'All'>('All');
 
     const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState<number | 'All'>(10);
+    const [pageSize, setPageSize] = useState<number>(10);
 
     const [sortField, setSortField] = useState<SortField>('date');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -149,7 +149,6 @@ export default function ListPage({ params }: { params: { id: string } }) {
     }, [searchTerm, deptFilter, stageFilter, studyTypeFilter]);
 
     const paginatedStudents = useMemo(() => {
-        if (pageSize === 'All') return filteredStudents;
         const startIndex = (currentPage - 1) * pageSize;
         return filteredStudents.slice(startIndex, startIndex + pageSize);
     }, [filteredStudents, currentPage, pageSize]);
@@ -232,97 +231,103 @@ export default function ListPage({ params }: { params: { id: string } }) {
                 <div>
                     <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight uppercase">Course {listName.replace('L', '')}</h1>
                 </div>
-                <button
-                    onClick={exportListToExcel}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all duration-300 transform active:scale-95 text-sm font-bold shadow-[0_5px_15px_-5px_rgba(79,70,229,0.5)] hover:shadow-[0_10px_20px_-5px_rgba(79,70,229,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                    title={`تصدير الطلاب المفلترين في Course ${listName} إلى Excel`}
-                    disabled={filteredStudents.length === 0}
-                >
-                    <Download className="w-4 h-4" />
-                    تصدير
-                </button>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-border shadow-sm flex flex-col sm:flex-row gap-4 mb-6" dir="rtl">
-                <div className="relative flex-1">
-                    <Search className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder="البحث عن اسم..."
-                        className="w-full pr-10 pl-9 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-sm"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    {searchTerm && (
-                        <button
-                            onClick={() => setSearchTerm('')}
-                            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-all duration-200"
-                            title="مسح البحث"
-                        >
-                            <X className="w-3 h-3" />
-                        </button>
-                    )}
-                </div>
-
-                <div className="flex flex-wrap gap-4 items-center">
-                    <div className="flex items-center gap-2">
-                        <Filter className="w-5 h-5 text-muted-foreground" />
-                        <div className="w-[140px] sm:w-[180px] md:w-[220px]">
-                            <Dropdown
-                                value={deptFilter}
-                                searchable={true}
-                                onChange={(val) => setDeptFilter(val as any)}
-                                options={[
-                                    { label: 'جميع الأقسام', value: 'All' },
-                                    ...departments
-                                        .filter((dept: string) => {
-                                            if (currentUser?.role === 'Viewer' && !currentUser.allowedDepartments?.includes(dept)) {
-                                                return false;
-                                            }
-                                            return true;
-                                        })
-                                        .map((dept: string) => ({ label: dept, value: dept }))
-                                ]}
+            {/* Sticky Search & Filter Bar with Background Shield */}
+            <div className="sticky -top-6 lg:-top-8 z-30 bg-slate-50 -mx-6 lg:-mx-8 px-6 lg:px-8 pt-6 lg:pt-8 pb-3 -mt-6 lg:-mt-8">
+                <div className="max-w-7xl mx-auto">
+                    <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 mb-2 transition-all" dir="rtl">
+                        <div className="relative flex-1">
+                            <Search className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="البحث عن اسم..."
+                                className="w-full pr-10 pl-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300 font-medium text-sm"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
                             />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-all duration-200"
+                                    title="مسح البحث"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            )}
                         </div>
-                    </div>
 
-                    <div className="w-[140px] sm:w-[160px]">
-                        <Dropdown
-                            value={stageFilter}
-                            onChange={(val) => setStageFilter(val)}
-                            options={[
-                                { label: 'جميع المراحل', value: 'All' },
-                                ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).sort().map(stage => ({
-                                    label: stage.startsWith('المرحلة') ? stage : stage.includes('Stage') ? stage.replace('Stage', 'المرحلة') : `المرحلة ${stage}`,
-                                    value: stage
-                                }))
-                            ]}
-                        />
-                    </div>
+                        <div className="flex flex-wrap gap-4 items-center">
+                            <div className="flex items-center gap-2">
+                                <Filter className="w-5 h-5 text-muted-foreground" />
+                                <div className="w-[140px] sm:w-[180px] md:w-[220px]">
+                                    <Dropdown
+                                        value={deptFilter}
+                                        searchable={true}
+                                        onChange={(val) => setDeptFilter(val as any)}
+                                        options={[
+                                            { label: 'جميع الأقسام', value: 'All' },
+                                            ...departments
+                                                .filter((dept: string) => {
+                                                    if (currentUser?.role === 'Viewer' && !currentUser.allowedDepartments?.includes(dept)) {
+                                                        return false;
+                                                    }
+                                                    return true;
+                                                })
+                                                .map((dept: string) => ({ label: dept, value: dept }))
+                                        ]}
+                                    />
+                                </div>
+                            </div>
 
-                    <div className="w-[140px] sm:w-[150px]">
-                        <Dropdown
-                            value={studyTypeFilter}
-                            onChange={(val) => setStudyTypeFilter(val as any)}
-                            options={[
-                                { label: 'جميع الدراسات', value: 'All' },
-                                { label: 'صباحي', value: 'صباحي' },
-                                { label: 'مسائي', value: 'مسائي' },
-                            ]}
-                        />
+                            <div className="w-[140px] sm:w-[160px]">
+                                <Dropdown
+                                    value={stageFilter}
+                                    onChange={(val) => setStageFilter(val)}
+                                    options={[
+                                        { label: 'جميع المراحل', value: 'All' },
+                                        ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).sort().map(stage => ({
+                                            label: stage.startsWith('المرحلة') ? stage : stage.includes('Stage') ? stage.replace('Stage', 'المرحلة') : `المرحلة ${stage}`,
+                                            value: stage
+                                        }))
+                                    ]}
+                                />
+                            </div>
+
+                            <div className="w-[140px] sm:w-[150px]">
+                                <Dropdown
+                                    value={studyTypeFilter}
+                                    onChange={(val) => setStudyTypeFilter(val as any)}
+                                    options={[
+                                        { label: 'جميع الدراسات', value: 'All' },
+                                        { label: 'صباحي', value: 'صباحي' },
+                                        { label: 'مسائي', value: 'مسائي' },
+                                    ]}
+                                />
+                            </div>
+
+                            <button
+                                onClick={exportListToExcel}
+                                className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all duration-300 transform active:scale-95 text-sm font-bold shadow-[0_5px_15px_-5px_rgba(79,70,229,0.5)] hover:shadow-[0_10px_20px_-5px_rgba(79,70,229,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                                title={`تصدير الطلاب المفلترين في Course ${listName} إلى Excel`}
+                                disabled={filteredStudents.length === 0}
+                            >
+                                <Download className="w-4 h-4" />
+                                تصدير
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 flex flex-col relative z-10 w-full overflow-visible">
-                <div className="overflow-x-auto w-full rounded-t-2xl">
+                <div className="overflow-x-auto md:overflow-visible w-full rounded-t-2xl">
                     <table className="w-full text-right border-separate border-spacing-0" dir="rtl">
                         <thead>
-                            <tr className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 text-slate-800 border-b-2 border-slate-200 select-none">
+                            <tr className="bg-slate-100 text-slate-800 border-b-2 border-slate-200 select-none">
                                 <th
                                     onClick={() => handleSort('index')}
-                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center w-16 cursor-pointer transition-all duration-200 group/th ${sortField === 'index' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
+                                    className={`sticky top-[86px] sm:top-[88px] z-20 p-3.5 md:p-4 border-b-2 border-slate-200 text-center w-16 cursor-pointer transition-all duration-200 group/th ${sortField === 'index' ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
                                     title="ترتيب حسب التسلسل"
                                 >
                                     <div className="flex items-center justify-center gap-1.5">
@@ -339,7 +344,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
                                 <th
                                     onClick={() => handleSort('name')}
-                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 cursor-pointer transition-all duration-200 group/th ${sortField === 'name' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
+                                    className={`sticky top-[86px] sm:top-[88px] z-20 p-3.5 md:p-4 border-b-2 border-slate-200 cursor-pointer transition-all duration-200 group/th ${sortField === 'name' ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
                                     title="ترتيب حسب اسم الطالب (أ-ي / ي-أ)"
                                 >
                                     <div className="flex items-center gap-2 justify-start">
@@ -359,7 +364,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
                                 <th
                                     onClick={() => handleSort('stage')}
-                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'stage' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
+                                    className={`sticky top-[86px] sm:top-[88px] z-20 p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'stage' ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
                                     title="ترتيب حسب المرحلة الدراسية"
                                 >
                                     <div className="flex items-center justify-center gap-2">
@@ -379,7 +384,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
                                 <th
                                     onClick={() => handleSort('department')}
-                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'department' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
+                                    className={`sticky top-[86px] sm:top-[88px] z-20 p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'department' ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
                                     title="ترتيب حسب القسم"
                                 >
                                     <div className="flex items-center justify-center gap-2">
@@ -399,7 +404,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
                                 <th
                                     onClick={() => handleSort('studyType')}
-                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'studyType' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
+                                    className={`sticky top-[86px] sm:top-[88px] z-20 p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'studyType' ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
                                     title="ترتيب حسب نوع الدراسة (صباحي / مسائي)"
                                 >
                                     <div className="flex items-center justify-center gap-2">
@@ -419,7 +424,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
                                 <th
                                     onClick={() => handleSort('date')}
-                                    className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'date' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
+                                    className={`sticky top-[86px] sm:top-[88px] z-20 p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'date' ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
                                     title="ترتيب حسب تاريخ المباشرة (الأحدث / الأقدم)"
                                 >
                                     <div className="flex items-center justify-center gap-2">
@@ -440,7 +445,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                 {currentUser.role !== 'Viewer' && (
                                     <th
                                         onClick={() => handleSort('assignedBy')}
-                                        className={`p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'assignedBy' ? 'bg-indigo-50/80' : 'hover:bg-slate-200/50'}`}
+                                        className={`sticky top-[86px] sm:top-[88px] z-20 p-3.5 md:p-4 border-b-2 border-slate-200 text-center cursor-pointer transition-all duration-200 group/th ${sortField === 'assignedBy' ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}`}
                                         title="ترتيب حسب المباشر"
                                     >
                                         <div className="flex items-center justify-center gap-2">
@@ -459,7 +464,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                     </th>
                                 )}
 
-                                {canRemove && <th className="p-3.5 md:p-4 border-b-2 border-slate-200 w-16 text-center text-xs font-bold text-slate-400">إجراءات</th>}
+                                {canRemove && <th className="sticky top-[86px] sm:top-[88px] z-20 bg-slate-100 p-3.5 md:p-4 border-b-2 border-slate-200 w-16 text-center text-xs font-bold text-slate-400">إجراءات</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-sm">
