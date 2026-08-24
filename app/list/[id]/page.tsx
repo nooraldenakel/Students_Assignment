@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useStore, Student, Department, normalizeArabic } from '../../../lib/store';
+import { useStore, Student, Department, StudyType, normalizeArabic } from '../../../lib/store';
 import { useRouter } from 'next/navigation';
 import { Trash2, Download, Search, Filter, X, Lock, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium, Calendar, UserCheck, Hash } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../../../components/Pagination';
 import Dropdown from '../../../components/Dropdown';
+import ScrollToTop from '../../../components/ScrollToTop';
 
 type SortField = 'index' | 'name' | 'stage' | 'department' | 'studyType' | 'date' | 'assignedBy';
 type SortDirection = 'asc' | 'desc';
@@ -33,6 +34,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
     const [stageFilter, setStageFilter] = useState<string>('All');
+    const [studyTypeFilter, setStudyTypeFilter] = useState<StudyType | 'All'>('All');
 
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState<number | 'All'>(10);
@@ -81,8 +83,9 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
             const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
             const matchStage = stageFilter === 'All' || s.stage === stageFilter;
+            const matchStudyType = studyTypeFilter === 'All' || s.studyType === studyTypeFilter;
 
-            return matchDept && matchStage;
+            return matchDept && matchStage && matchStudyType;
         });
 
         // Sort by assignment date (oldest first: chronological insertion order)
@@ -91,7 +94,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
             const dateB = new Date(b.assignments[listName]!.date).getTime();
             return dateA - dateB;
         });
-    }, [students, listName, currentUser, deptFilter, stageFilter]);
+    }, [students, listName, currentUser, deptFilter, stageFilter, studyTypeFilter]);
 
     const filteredStudents = useMemo(() => {
         const cleanedSearch = normalizeArabic(searchTerm);
@@ -143,7 +146,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
     // Reset pagination when filters change
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, deptFilter, stageFilter]);
+    }, [searchTerm, deptFilter, stageFilter, studyTypeFilter]);
 
     const paginatedStudents = useMemo(() => {
         if (pageSize === 'All') return filteredStudents;
@@ -205,7 +208,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
             const meta = s.assignments[listName];
             const row: Record<string, string> = {
                 'الاسم': s.name,
-                'المرحلة الدراسية': s.stage,
+                'المرحلة الدراسية': s.stage.startsWith('المرحلة') ? s.stage : s.stage.includes('Stage') ? s.stage.replace('Stage', 'المرحلة') : `المرحلة ${s.stage}`,
                 'القسم': s.department,
                 'نوع الدراسة': s.studyType,
                 'تاريخ المباشرة': meta ? new Date(meta.date).toLocaleDateString() : '-',
@@ -228,9 +231,6 @@ export default function ListPage({ params }: { params: { id: string } }) {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight uppercase">Course {listName.replace('L', '')}</h1>
-                    <p className="text-sm font-medium text-slate-500 mt-2">
-                        مسجل الدخول كـ <strong className="text-indigo-600">{currentUser.name}</strong> ({currentUser.role})
-                    </p>
                 </div>
                 <button
                     onClick={exportListToExcel}
@@ -287,13 +287,28 @@ export default function ListPage({ params }: { params: { id: string } }) {
                         </div>
                     </div>
 
-                    <div className="w-[140px]">
+                    <div className="w-[140px] sm:w-[160px]">
                         <Dropdown
                             value={stageFilter}
                             onChange={(val) => setStageFilter(val)}
                             options={[
                                 { label: 'جميع المراحل', value: 'All' },
-                                ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).map(stage => ({ label: stage.replace('Stage', 'المرحلة'), value: stage }))
+                                ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).sort().map(stage => ({
+                                    label: stage.startsWith('المرحلة') ? stage : stage.includes('Stage') ? stage.replace('Stage', 'المرحلة') : `المرحلة ${stage}`,
+                                    value: stage
+                                }))
+                            ]}
+                        />
+                    </div>
+
+                    <div className="w-[140px] sm:w-[150px]">
+                        <Dropdown
+                            value={studyTypeFilter}
+                            onChange={(val) => setStudyTypeFilter(val as any)}
+                            options={[
+                                { label: 'جميع الدراسات', value: 'All' },
+                                { label: 'صباحي', value: 'صباحي' },
+                                { label: 'مسائي', value: 'مسائي' },
                             ]}
                         />
                     </div>
@@ -519,6 +534,9 @@ export default function ListPage({ params }: { params: { id: string } }) {
                     onPageSizeChange={setPageSize}
                 />
             </div>
+
+            {/* Scroll to Top Button */}
+            <ScrollToTop itemsCount={paginatedStudents.length} />
         </div>
     );
 }

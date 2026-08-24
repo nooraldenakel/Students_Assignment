@@ -7,6 +7,7 @@ import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2, Arro
 import * as XLSX from 'xlsx';
 import Pagination from '../components/Pagination';
 import Dropdown from '../components/Dropdown';
+import ScrollToTop from '../components/ScrollToTop';
 
 type SortField = 'name' | 'stage' | 'department' | 'studyType';
 type SortDirection = 'asc' | 'desc';
@@ -24,6 +25,7 @@ export default function MainPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
     const [stageFilter, setStageFilter] = useState<string>('All');
+    const [studyTypeFilter, setStudyTypeFilter] = useState<StudyType | 'All'>('All');
 
     const [sortField, setSortField] = useState<SortField | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -106,7 +108,8 @@ export default function MainPage() {
             const matchName = !cleanedSearch || normalizeArabic(s.name || '').includes(cleanedSearch);
             const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
             const matchStage = stageFilter === 'All' || s.stage === stageFilter;
-            return matchName && matchDept && matchStage;
+            const matchStudyType = studyTypeFilter === 'All' || s.studyType === studyTypeFilter;
+            return matchName && matchDept && matchStage && matchStudyType;
         });
 
         if (!sortField) {
@@ -131,11 +134,11 @@ export default function MainPage() {
             }
             return sortDirection === 'asc' ? comparison : -comparison;
         });
-    }, [students, searchTerm, deptFilter, stageFilter, sortField, sortDirection]);
+    }, [students, searchTerm, deptFilter, stageFilter, studyTypeFilter, sortField, sortDirection]);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, deptFilter, stageFilter]);
+    }, [searchTerm, deptFilter, stageFilter, studyTypeFilter]);
 
     const paginatedStudents = useMemo(() => {
         if (pageSize === 'All') return filteredStudents;
@@ -183,24 +186,24 @@ export default function MainPage() {
     const isAdmin = currentUser.role === 'Admin';
 
     const exportStudentsToExcel = () => {
-        if (filteredStudents.length === 0) {
-            showAlert('فشل التصدير', 'لا يوجد طلاب يطابقون معايير التصفية الحالية للتصدير.', 'error');
+        const unassignedStudents = filteredStudents.filter(s => !s.assignments || Object.keys(s.assignments).length === 0);
+        if (unassignedStudents.length === 0) {
+            showAlert('فشل التصدير', 'لا يوجد طلاب غير مباشرين يطابقون معايير التصفية الحالية للتصدير.', 'error');
             return;
         }
-        const data = filteredStudents.map(s => {
-            const assignedLists = Object.keys(s.assignments).map(l => l.replace('L', 'Course ')).join(', ') || 'غير مباشر';
+        const data = unassignedStudents.map(s => {
             return {
                 'الاسم': s.name,
-                'المرحلة الدراسية': s.stage.replace('Stage', 'المرحلة'),
+                'المرحلة الدراسية': s.stage.startsWith('المرحلة') ? s.stage : s.stage.includes('Stage') ? s.stage.replace('Stage', 'المرحلة') : `المرحلة ${s.stage}`,
                 'القسم': s.department,
                 'نوع الدراسة': s.studyType,
-                'المباشرات': assignedLists
+                'حالة المباشرة': 'غير مباشر'
             };
         });
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "الطلاب المفلترين");
-        XLSX.writeFile(workbook, "filtered_students.xlsx");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "الطلاب غير المباشرين");
+        XLSX.writeFile(workbook, "unassigned_students.xlsx");
     };
 
     const handleSaveEdit = (id: string) => {
@@ -266,9 +269,6 @@ export default function MainPage() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight">القائمة الرئيسية للطلاب</h1>
-                    <p className="text-sm font-medium text-slate-500 mt-2">
-                        مسجل الدخول كـ <strong className="text-indigo-600">{currentUser.name}</strong> ({currentUser.role})
-                    </p>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -334,10 +334,22 @@ export default function MainPage() {
                         />
                     </div>
 
+                    <div className="w-[140px] sm:w-[150px]">
+                        <Dropdown
+                            value={studyTypeFilter}
+                            onChange={(val) => setStudyTypeFilter(val as any)}
+                            options={[
+                                { label: 'جميع الدراسات', value: 'All' },
+                                { label: 'صباحي', value: 'صباحي' },
+                                { label: 'مسائي', value: 'مسائي' },
+                            ]}
+                        />
+                    </div>
+
                     <button
                         onClick={exportStudentsToExcel}
                         className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all duration-300 transform active:scale-95 text-sm font-bold shadow-[0_5px_15px_-5px_rgba(79,70,229,0.5)] hover:shadow-[0_10px_20px_-5px_rgba(79,70,229,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                        title="تصدير الطلاب المفلترين إلى Excel"
+                        title="تصدير الطلاب غير المباشرين المفلترين إلى Excel"
                         disabled={filteredStudents.length === 0}
                     >
                         <Download className="w-4 h-4" />
@@ -623,6 +635,12 @@ export default function MainPage() {
                     onPageSizeChange={setPageSize}
                 />
             </div>
+
+            {/* Scroll to Top Button — only shows when 30+ items and scrolled down */}
+            <ScrollToTop
+                itemsCount={paginatedStudents.length}
+                hasBottomFab={isAdmin}
+            />
 
             {/* FAB Button — Admin only */}
             {isAdmin && (

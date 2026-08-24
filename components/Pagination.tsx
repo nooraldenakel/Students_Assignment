@@ -25,12 +25,26 @@ export default function Pagination({
     const actualPageSize = pageSize === 'All' ? totalItems : pageSize;
     const totalPages = actualPageSize > 0 ? Math.ceil(totalItems / actualPageSize) : 1;
 
+    const PRESET_PAGE_SIZES = [10, 20, 30, 50, 75, 100, 200];
+
+    // Only allow page sizes if total items is at least that size (always keeping 10 as minimum)
+    const availableSizes = PRESET_PAGE_SIZES.filter(s => s === 10 || totalItems >= s);
+
     // Adjust current page if it's out of bounds after a filter or size change
     React.useEffect(() => {
         if (currentPage > totalPages && totalPages > 0) {
             onPageChange(totalPages);
         }
     }, [currentPage, totalPages, onPageChange]);
+
+    // If current numeric pageSize exceeds total items and is > 10, adjust to the highest valid size
+    React.useEffect(() => {
+        if (typeof pageSize === 'number' && pageSize > 10 && pageSize > totalItems) {
+            const validSizes = PRESET_PAGE_SIZES.filter(s => s === 10 || totalItems >= s);
+            const fallback = validSizes[validSizes.length - 1] || 10;
+            onPageSizeChange(fallback);
+        }
+    }, [totalItems, pageSize, onPageSizeChange]);
 
     if (totalItems === 0) {
         return null; // hide or invisible if no students
@@ -61,6 +75,12 @@ export default function Pagination({
 
     const displaySizeValue = isCustom ? 'Custom' : (pageSize === 'All' ? 'All' : pageSize.toString());
 
+    const dropdownOptions = [
+        ...availableSizes.map(s => ({ label: s.toString(), value: s.toString() })),
+        { label: 'الكل', value: 'All' },
+        { label: 'مخصص...', value: 'Custom' }
+    ];
+
     return (
         <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-white border-t border-border w-full gap-4 relative z-20" style={{ borderBottomLeftRadius: 'inherit', borderBottomRightRadius: 'inherit' }}>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -70,17 +90,7 @@ export default function Pagination({
                         value={displaySizeValue}
                         onChange={handlePageSizeChange}
                         placement="top"
-                        options={[
-                            { label: '10', value: '10' },
-                            { label: '20', value: '20' },
-                            { label: '30', value: '30' },
-                            { label: '50', value: '50' },
-                            { label: '75', value: '75' },
-                            { label: '100', value: '100' },
-                            { label: '200', value: '200' },
-                            { label: 'الكل', value: 'All' },
-                            { label: 'مخصص...', value: 'Custom' }
-                        ]}
+                        options={dropdownOptions}
                     />
                 </div>
 
