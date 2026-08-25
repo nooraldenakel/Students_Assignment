@@ -168,10 +168,11 @@ export const useStore = create<AppState>()(
             setHydrated: () => set({ isHydrated: true }),
 
             initRealtime: async () => {
+                const currentUser = get().currentUser;
+                if (!currentUser) return;
                 if (get().isInitialized || isInitializing) return;
                 isInitializing = true;
 
-                const currentUser = get().currentUser;
                 const isViewer = currentUser?.role === 'Viewer';
                 const allowedDepartments = currentUser?.allowedDepartments || [];
 
@@ -529,14 +530,38 @@ export const useStore = create<AppState>()(
             },
             logout: async () => {
                 isInitializing = false;
-                await supabase.removeAllChannels();
-                await supabase.auth.signOut();
+                try {
+                    await supabase.removeAllChannels();
+                } catch (err) {
+                    console.error('Error removing Supabase channels:', err);
+                }
+                try {
+                    await supabase.auth.signOut();
+                } catch (err) {
+                    console.error('Error signing out of Supabase:', err);
+                }
                 set({
                     currentUser: null,
                     isInitialized: false,
                     students: [],
-                    users: []
+                    users: [],
+                    departments: []
                 });
+                if (typeof window !== 'undefined') {
+                    try {
+                        localStorage.removeItem('student-list-auth-v2');
+                        // Clean any supabase auth session keys
+                        for (let i = localStorage.length - 1; i >= 0; i--) {
+                            const key = localStorage.key(i);
+                            if (key && (key.startsWith('sb-') || key.includes('auth') || key.includes('student'))) {
+                                localStorage.removeItem(key);
+                            }
+                        }
+                        sessionStorage.clear();
+                    } catch (e) {
+                        console.error('Error clearing local storage on logout:', e);
+                    }
+                }
             },
 
             addUser: async (name, email, password, role, allowedDepartments) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../../lib/store';
 import { useRouter } from 'next/navigation';
 import {
@@ -18,9 +18,17 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
+    const currentUser = useStore((state) => state.currentUser);
+    const isHydrated = useStore((state) => state.isHydrated);
     const login = useStore((state) => state.login);
     const showAlert = useStore((state) => state.showAlert);
     const router = useRouter();
+
+    useEffect(() => {
+        if (isHydrated && currentUser) {
+            router.push('/');
+        }
+    }, [isHydrated, currentUser, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();

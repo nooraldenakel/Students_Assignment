@@ -131,8 +131,8 @@ export function Sidebar() {
                 {currentUser && (
                     <div className="p-4 border-t border-border mt-auto">
                         <button
-                            onClick={() => {
-                                logout();
+                            onClick={async () => {
+                                await logout();
                                 window.location.href = '/login';
                             }}
                             title={!expanded ? 'Sign Out' : undefined}
