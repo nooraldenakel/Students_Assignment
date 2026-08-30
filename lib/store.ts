@@ -565,20 +565,26 @@ export const useStore = create<AppState>()(
             },
 
             addUser: async (name, email, password, role, allowedDepartments) => {
+                const normalizedEmail = email.trim().toLowerCase();
+                if (get().users.some(u => u.email.toLowerCase() === normalizedEmail)) {
+                    get().showAlert('تنبيه', 'هذا البريد الإلكتروني مسجل بالفعل لمستخدم آخر في النظام.', 'error');
+                    return;
+                }
+
                 const { data: newUserId, error } = await supabase.rpc('create_app_user', {
-                    p_email: email,
+                    p_email: email.trim(),
                     p_password: password,
-                    p_name: name,
+                    p_name: name.trim(),
                     p_role: role,
                     p_allowed_departments: allowedDepartments || []
                 });
 
                 if (error) {
-                    get().showAlert('Error', error.message || 'Failed to create user', 'error');
+                    get().showAlert('خطأ', error.message || 'فشل إنشاء المستخدم', 'error');
                 } else if (!get().users.some((u) => u.id === newUserId)) {
                     // In case realtime is slow, pessimistically add it 
                     set(state => ({
-                        users: [...state.users, { id: newUserId, name, email, role, allowedDepartments }]
+                        users: [...state.users, { id: newUserId, name: name.trim(), email: email.trim(), role, allowedDepartments }]
                     }));
                 }
             },
