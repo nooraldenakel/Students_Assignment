@@ -1,6 +1,20 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { supabase } from './supabase';
+
+// Baghdad operates on GMT+3 (UTC+3) with no DST
+export function getNextBaghdadMidnight(nowMs: number = Date.now()): number {
+    const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000; // GMT+3
+    const baghdadTime = new Date(nowMs + BAGHDAD_OFFSET_MS);
+
+    const year = baghdadTime.getUTCFullYear();
+    const month = baghdadTime.getUTCMonth();
+    const date = baghdadTime.getUTCDate();
+
+    // 12:00 AM (00:00:00.000) of the next day in Baghdad
+    const nextMidnightBaghdad = Date.UTC(year, month, date + 1, 0, 0, 0, 0);
+    return nextMidnightBaghdad - BAGHDAD_OFFSET_MS;
+}
 
 export type Role = 'Admin' | 'Operator' | 'Viewer';
 
@@ -50,6 +64,7 @@ export interface Student {
 interface AppState {
     users: User[];
     currentUser: User | null;
+    sessionExpiresAt: number | null;
     students: Student[];
     l1Enabled: boolean;
     l2Enabled: boolean;
@@ -156,6 +171,7 @@ export const useStore = create<AppState>()(
         (set, get) => ({
             users: [],
             currentUser: null,
+            sessionExpiresAt: null,
             students: [],
             l1Enabled: true,
             l2Enabled: true,
@@ -522,7 +538,11 @@ export const useStore = create<AppState>()(
                         role: data.role as Role,
                         allowedDepartments: data.allowed_departments as Department[] | undefined
                     };
-                    set({ currentUser: parsedUser });
+                    const sessionExpiresAt = getNextBaghdadMidnight();
+                    set({ 
+                        currentUser: parsedUser,
+                        sessionExpiresAt 
+                    });
                     get().initRealtime();
                     return true;
                 }
@@ -542,6 +562,7 @@ export const useStore = create<AppState>()(
                 }
                 set({
                     currentUser: null,
+                    sessionExpiresAt: null,
                     isInitialized: false,
                     students: [],
                     users: [],
@@ -782,9 +803,54 @@ export const useStore = create<AppState>()(
         }),
         {
             name: 'student-list-auth-v2',
-            partialize: (state) => ({ currentUser: state.currentUser }), // Only persist the logged in user
+            storage: createJSONStorage(() => ({
+                getItem: (key: string) => {
+                    if (typeof window === 'undefined') return null;
+                    const raw = localStorage.getItem(key);
+                    if (!raw) return null;
+                    try {
+                        const parsed = JSON.parse(raw);
+                        const state = parsed?.state;
+                        // If user session exists, ensure it has not passed 12:00 AM Baghdad time
+                        if (state?.currentUser) {
+                            if (!state.sessionExpiresAt || Date.now() >= state.sessionExpiresAt) {
+                                localStorage.removeItem(key);
+                                for (let i = localStorage.length - 1; i >= 0; i--) {
+                                    const k = localStorage.key(i);
+                                    if (k && (k.startsWith('sb-') || k.includes('auth') || k.includes('student'))) {
+                                        localStorage.removeItem(k);
+                                    }
+                                }
+                                return null;
+                            }
+                        }
+                    } catch {
+                        return null;
+                    }
+                    return raw;
+                },
+                setItem: (key: string, value: string) => {
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem(key, value);
+                    }
+                },
+                removeItem: (key: string) => {
+                    if (typeof window !== 'undefined') {
+                        localStorage.removeItem(key);
+                    }
+                }
+            })),
+            partialize: (state) => ({ 
+                currentUser: state.currentUser,
+                sessionExpiresAt: state.sessionExpiresAt
+            }),
             onRehydrateStorage: () => (state) => {
-                if (state) state.setHydrated();
+                if (state) {
+                    if (state.currentUser && (!state.sessionExpiresAt || Date.now() >= state.sessionExpiresAt)) {
+                        state.logout();
+                    }
+                    state.setHydrated();
+                }
             },
         }
     )
