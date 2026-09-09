@@ -1,0 +1,160 @@
+================================================================================
+EDUMANAGER — STUDENT COURSE ASSIGNMENT & REGISTRATION SYSTEM
+Comprehensive System Architecture & Technical Specification
+================================================================================
+
+1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+EduManager is a specialized academic administration and workflow management web 
+application. It is engineered to track, manage, and coordinate student course 
+assignments and registrations (المباشرة الأكاديمية) across university colleges 
+and academic departments.
+
+The system operates in real-time, allowing administrative teams (Admins, Operators, 
+and Department Viewers) to handle large student registries, monitor enrollment 
+progression across multiple course tracks (Course 1 through Course 4), and generate 
+institutional reports and Excel exports.
+
+
+2. CORE ARCHITECTURE & TECH STACK
+--------------------------------------------------------------------------------
+Frontend Framework:
+  • Next.js 14 (App Router, Client Components)
+  • React 18
+  • TypeScript
+
+Styling & UI Components:
+  • Vanilla Tailwind CSS
+  • Lucide React Icons
+  • Google Fonts (Cairo & Plus Jakarta Sans)
+
+State Management & Session Lifecycles:
+  • Zustand with custom JSON storage persistence
+  • Automated daily session expiration aligned to Baghdad Midnight (GMT+3)
+
+Backend, Database & Realtime Infrastructure:
+  • Supabase (Managed PostgreSQL)
+  • Supabase Auth linked with public.app_users
+  • Row Level Security (RLS) policies
+  • PostgreSQL Stored Procedures / RPCs (create_app_user, delete_app_user)
+  • Supabase Realtime Channels (schema-db-changes via postgres_changes)
+
+Data Visualization & Document Export:
+  • SheetJS (xlsx) for bulk Excel imports & exports
+  • Recharts for interactive graphical metrics and distributions
+  • jsPDF & jspdf-autotable for PDF output
+
+
+3. ROLE-BASED ACCESS CONTROL (RBAC)
+--------------------------------------------------------------------------------
+The system defines three strict privilege tiers:
+
+1. ADMIN (المسؤول):
+   • Full system access and administrative authority.
+   • View all students across all academic departments.
+   • Assign students to any course (Course 1 - Course 4).
+   • Remove or reset existing course assignments.
+   • Add, edit, and delete student profiles.
+   • Manage departments (add / remove departments).
+   • Course assignment toggles: Enable or disable assignment actions globally for 
+     Course 1 (L1), Course 2 (L2), Course 3 (L3), and Course 4 (L4).
+   • Manage staff accounts: Create users, assign roles, assign department access, 
+     and delete users.
+   • Database administration: Full Excel export, bulk Excel import, and complete 
+     data purge (protected by password re-verification modal).
+   • Access to Reports & Institutional Analytics dashboard.
+
+2. OPERATOR (المشغل):
+   • Access to the Main Student Registry list.
+   • Search, filter, and sort students.
+   • Assign unassigned students to any currently enabled course.
+   • Edit student academic details (stage, department).
+   • Cannot remove existing assignments (only Admins can un-assign).
+   • Cannot access Settings, User Management, or System Database tools.
+
+3. VIEWER (المشاهد):
+   • Restricted read-only view.
+   • Immediately redirected away from the main list directly to the Course Lists.
+   • Can only view students assigned to courses who belong strictly to the Viewer's 
+     assigned departments (allowed_departments).
+   • Cannot assign, edit, or delete any student or system record.
+
+
+4. KEY MODULES & FUNCTIONAL WORKFLOWS
+--------------------------------------------------------------------------------
+A. Authentication & Session Lifecycles (/login):
+   • Secure email/password login verified against Supabase Auth and app_users table.
+   • Baghdad Midnight Expiration: Calculates 12:00 AM Baghdad Time (GMT+3). Sessions 
+     automatically terminate at midnight to ensure daily data hygiene and fresh 
+     operator sessions.
+
+B. Main Student Registry Dashboard (/):
+   • Instant Course Assignment: Direct one-click buttons to assign students to 
+     Course 1 (L1), Course 2 (L2), Course 3 (L3), or Course 4 (L4).
+   • Multi-Parameter Search & Filtering:
+     - Search with full Arabic text normalization (stripping diacritics and unifying Alefs).
+     - Filtering by Department, Academic Stage (المرحلة), and Study Mode (صباحي / مسائي).
+   • Inline Student Editing & Creation: Quick editing modal for stage and department, 
+     plus floating action button (FAB) for adding new student records.
+   • Export of Unassigned Students: One-click export to Excel (.xlsx) of students 
+     who have not yet completed their course assignment.
+
+C. Dedicated Course Lists (/list/l1, /list/l2, /list/l3, /list/l4):
+   • Displays chronological queues of students registered for each specific course.
+   • Records exact assignment timestamps and the username of the staff operator 
+     who processed the record.
+   • Viewers only see students belonging to their permitted departments.
+   • Individual course roster export to Excel (.xlsx).
+
+D. Reports & Institutional Analytics (/reports):
+   • Executive KPI cards: Total Students, Total Assigned, Assigned Today, and 
+     Unassigned Students.
+   • Interactive Visualizations (Recharts): Bar charts showing distribution across 
+     courses (L1-L4) and comparative charts across academic departments.
+   • Comprehensive Institutional Excel Export: Multi-sheet Excel workbook compiling 
+     overall statistics, department metrics, and full student rosters.
+
+E. Settings & Database Operations (/settings):
+   • Course Availability Toggles: Switches to enable or disable registrations for 
+     Course 1, Course 2, Course 3, or Course 4.
+   • Department Management: Adding and deleting academic departments.
+   • User Management: Adding staff, selecting roles, configuring department scopes 
+     for Viewers, and removing users.
+   • Database Operations:
+     - Full System Export: Backup all student data into Excel (.xlsx).
+     - Batch Data Import: Read Excel files and import thousands of student records 
+       in 1,000-record chunks.
+     - Database Wipe: Safely purge student and assignment records.
+     - Security: All database modifications require confirmation via an Admin 
+       Password Re-verification modal.
+
+
+5. TECHNICAL HIGHLIGHTS & ARCHITECTURAL OPTIMIZATIONS
+--------------------------------------------------------------------------------
+1. Arabic Text Normalization (normalizeArabic):
+   • Strips Tashkeel diacritics: [\u064B-\u065F\u0670]
+   • Unifies Alef variants ([أإآٱ] -> ا)
+   • Unifies Taa Marbuta (ة -> ه)
+   • Unifies Alef Maksura (ى -> ي)
+   • Collapses whitespace
+   Ensures accurate, resilient searching and deduplication in Arabic text environments.
+
+2. Parallel High-Throughput Batch Fetching:
+   • Queries exact record counts before fetching.
+   • Chunks requests into 1,000-record batches and fetches in parallel using 
+     Promise.all() to prevent timeouts and optimize loading speeds for large registries.
+
+3. Live Realtime Synchronization:
+   • Listens on Supabase Channel 'schema-db-changes'.
+   • Subscribes to postgres_changes on tables:
+     - students: Live insertion, updates, and removals.
+     - assignments: Real-time visual updates on course assignments.
+     - settings: Immediate lock/unlock of course buttons across all clients.
+     - app_users: Immediate role and department privilege synchronization.
+
+4. Database Security & Stored Procedures (RPCs):
+   • Row Level Security (RLS) enabled on all public tables.
+   • Functions create_app_user and delete_app_user execute under SECURITY DEFINER, 
+     enforcing administrative authorization checks before modifying auth.users 
+     and public.app_users atomically.
+================================================================================

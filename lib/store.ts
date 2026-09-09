@@ -38,6 +38,24 @@ export const normalizeArabic = (text: string): string => {
         .replace(/\s+/g, ' '); // Normalize multiple spaces
 };
 
+export function buildArabicRegexPattern(term: string): string {
+    if (!term || !term.trim()) return '';
+    const words = term.trim()
+        .replace(/[\u064B-\u065F\u0670]/g, '')
+        .split(/\s+/)
+        .filter(Boolean);
+
+    const wordPatterns = words.map(w => {
+        const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return escaped
+            .replace(/[أإآٱا]/g, '[أإآٱا]')
+            .replace(/[ةه]/g, '[ةه]')
+            .replace(/[ىي]/g, '[ىي]');
+    });
+
+    return '.*' + wordPatterns.join('.*') + '.*';
+}
+
 export type Department = string;
 export type StudyType = 'صباحي' | 'مسائي';
 
@@ -66,17 +84,61 @@ interface AppState {
     currentUser: User | null;
     sessionExpiresAt: number | null;
     students: Student[];
+    totalStudentsCount: number;
+    stats: {
+        totalAssigned: number;
+        assignedToday: number;
+        byList: { L1: number; L2: number; L3: number; L4: number };
+    };
+    courseStudents: Record<'L1' | 'L2' | 'L3' | 'L4', Student[]>;
+    courseDataVersion: number;
+
     l1Enabled: boolean;
     l2Enabled: boolean;
     l3Enabled: boolean;
     l4Enabled: boolean;
     departments: string[];
+    stages: string[];
     isInitialized: boolean;
     isHydrated: boolean;
 
     setHydrated: () => void;
     initRealtime: () => Promise<void>;
     refreshViewerData: () => Promise<void>;
+    refreshStats: () => Promise<void>;
+
+    fetchStudentsPage: (params: {
+        page: number;
+        pageSize: number;
+        searchTerm?: string;
+        deptFilter?: Department | 'All';
+        stageFilter?: string;
+        studyTypeFilter?: StudyType | 'All';
+        sortField?: string | null;
+        sortDirection?: 'asc' | 'desc';
+    }) => Promise<{ count: number }>;
+
+    fetchCourseStudentsPage: (params: {
+        courseId: 'L1' | 'L2' | 'L3' | 'L4';
+        page: number;
+        pageSize: number;
+        searchTerm?: string;
+        deptFilter?: Department | 'All';
+        stageFilter?: string;
+        studyTypeFilter?: StudyType | 'All';
+        sortField?: string | null;
+        sortDirection?: 'asc' | 'desc';
+    }) => Promise<{ students: Student[]; totalCount: number }>;
+
+    fetchCourseAllStudentsForExport: (params: {
+        courseId: 'L1' | 'L2' | 'L3' | 'L4';
+        searchTerm?: string;
+        deptFilter?: Department | 'All';
+        stageFilter?: string;
+        studyTypeFilter?: StudyType | 'All';
+    }) => Promise<Student[]>;
+
+    fetchCourseStudents: (courseId: 'L1' | 'L2' | 'L3' | 'L4') => Promise<Student[]>;
 
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => Promise<void>;
@@ -114,8 +176,10 @@ interface AppState {
 }
 
 let isInitializing = false;
+let activeRealtimeChannel: any = null;
+let refreshStatsTimeout: NodeJS.Timeout | null = null;
 
-async function fetchAllRecords(table: string, filterConfig?: { column: string, inValues: string[] }) {
+export async function fetchAllRecords(table: string, filterConfig?: { column: string, inValues: string[] }) {
     // 1. Get total count
     let countQuery = supabase.from(table).select('*', { count: 'exact', head: true });
     if (filterConfig && filterConfig.inValues.length > 0) {
@@ -173,76 +237,130 @@ export const useStore = create<AppState>()(
             currentUser: null,
             sessionExpiresAt: null,
             students: [],
+            totalStudentsCount: 0,
+            stats: { totalAssigned: 0, assignedToday: 0, byList: { L1: 0, L2: 0, L3: 0, L4: 0 } },
+            courseStudents: { L1: [], L2: [], L3: [], L4: [] },
+            courseDataVersion: 0,
             l1Enabled: true,
             l2Enabled: true,
             l3Enabled: true,
             l4Enabled: true,
             departments: [],
+            stages: ['1', '2', '3', '4', '5', '6'],
             isInitialized: false,
             isHydrated: false,
 
             setHydrated: () => set({ isHydrated: true }),
 
-            initRealtime: async () => {
-                const currentUser = get().currentUser;
-                if (!currentUser) return;
-                if (get().isInitialized || isInitializing) return;
-                isInitializing = true;
+            refreshStats: async () => {
+                const run = async () => {
+                    try {
+                        const currentUser = get().currentUser;
+                        if (!currentUser || currentUser.role === 'Viewer') return;
+                        const isAdmin = currentUser.role === 'Admin';
+                        const todayStart = new Date();
+                        todayStart.setHours(0, 0, 0, 0);
+                        const todayIso = todayStart.toISOString();
 
-                const isViewer = currentUser?.role === 'Viewer';
-                const allowedDepartments = currentUser?.allowedDepartments || [];
+                        // 1. ByList head counts (zero rows transferred over wire)
+                        const [l1Res, l2Res, l3Res, l4Res] = await Promise.all([
+                            supabase.from('assignments').select('*', { count: 'exact', head: true }).eq('list_id', 'L1'),
+                            supabase.from('assignments').select('*', { count: 'exact', head: true }).eq('list_id', 'L2'),
+                            supabase.from('assignments').select('*', { count: 'exact', head: true }).eq('list_id', 'L3'),
+                            supabase.from('assignments').select('*', { count: 'exact', head: true }).eq('list_id', 'L4')
+                        ]);
 
-                // Define filter for users (viewers don't need all users)
-                const usersPromise = isViewer
-                    ? Promise.resolve({ data: [] }) // Viewers don't need user list
-                    : fetchAllRecords('app_users');
+                        // 2. Total & today counts
+                        let totalQ = supabase.from('assignments').select('*', { count: 'exact', head: true });
+                        let todayQ = supabase.from('assignments').select('*', { count: 'exact', head: true }).gte('assigned_date', todayIso);
 
-                // 1. Initial Fetch
-                // Fetch assignments first so we can filter students by assigned ones for Viewers
-                const [usersRes, assignRes, settingsRes, deptRes] = await Promise.all([
-                    usersPromise,
-                    fetchAllRecords('assignments'),
-                    supabase.from('settings').select('*').eq('id', 1).single(),
-                    supabase.from('departments').select('*').order('name')
-                ]);
-
-                let studentsRes: { data: any[] };
-                if (isViewer) {
-                    const assignedStudentIds = Array.from(new Set((assignRes.data || []).map(a => a.student_id)));
-                    if (assignedStudentIds.length === 0 || allowedDepartments.length === 0) {
-                        studentsRes = { data: [] };
-                    } else {
-                        const BATCH_SIZE = 500;
-                        const promises = [];
-                        for (let i = 0; i < assignedStudentIds.length; i += BATCH_SIZE) {
-                            const chunk = assignedStudentIds.slice(i, i + BATCH_SIZE);
-                            const query = supabase.from('students').select('*')
-                                .in('id', chunk)
-                                .in('department', allowedDepartments);
-                            promises.push(query);
+                        if (!isAdmin) {
+                            totalQ = totalQ.eq('assigned_by_user_id', currentUser.id);
+                            todayQ = todayQ.eq('assigned_by_user_id', currentUser.id);
                         }
-                        const results = await Promise.all(promises);
-                        studentsRes = { data: results.flatMap(r => r.data || []) };
+
+                        const [totRes, todRes] = await Promise.all([totalQ, todayQ]);
+
+                        set({
+                            stats: {
+                                totalAssigned: totRes.count ?? 0,
+                                assignedToday: todRes.count ?? 0,
+                                byList: {
+                                    L1: l1Res.count ?? 0,
+                                    L2: l2Res.count ?? 0,
+                                    L3: l3Res.count ?? 0,
+                                    L4: l4Res.count ?? 0
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        console.error('refreshStats error:', e);
                     }
-                } else {
-                    studentsRes = await fetchAllRecords('students');
-                }
+                };
 
-                if (deptRes.data) {
-                    set({ departments: deptRes.data.map(d => d.name) });
-                }
+                if (refreshStatsTimeout) clearTimeout(refreshStatsTimeout);
+                refreshStatsTimeout = setTimeout(run, 300);
+            },
 
-                if (usersRes.data) {
-                    const parsedUsers = usersRes.data.map(u => ({
-                        id: u.id, name: u.name, email: u.email, role: u.role as Role,
-                        allowedDepartments: u.allowed_departments as Department[] | undefined
-                    }));
-                    set({ users: parsedUsers });
-                }
+            fetchStudentsPage: async ({
+                page,
+                pageSize,
+                searchTerm,
+                deptFilter,
+                stageFilter,
+                studyTypeFilter,
+                sortField,
+                sortDirection
+            }) => {
+                try {
+                    let query = supabase.from('students').select('*', { count: 'exact' });
 
-                if (studentsRes.data && assignRes.data) {
-                    const parsedStudents: Student[] = studentsRes.data.map(s => {
-                        const sAssigns = assignRes.data.filter(a => a.student_id === s.id);
+                    if (deptFilter && deptFilter !== 'All') {
+                        query = query.eq('department', deptFilter);
+                    }
+                    if (stageFilter && stageFilter !== 'All') {
+                        query = query.eq('stage', stageFilter);
+                    }
+                    if (studyTypeFilter && studyTypeFilter !== 'All') {
+                        query = query.eq('study_type', studyTypeFilter);
+                    }
+                    if (searchTerm && searchTerm.trim()) {
+                        const pattern = buildArabicRegexPattern(searchTerm);
+                        query = query.filter('name', 'imatch', pattern);
+                    }
+
+                    if (sortField) {
+                        const colMap: Record<string, string> = {
+                            name: 'name',
+                            stage: 'stage',
+                            department: 'department',
+                            studyType: 'study_type'
+                        };
+                        const col = colMap[sortField] || 'name';
+                        query = query.order(col, { ascending: sortDirection === 'asc' });
+                    } else {
+                        query = query.order('name', { ascending: true });
+                    }
+
+                    const from = (page - 1) * pageSize;
+                    const to = from + pageSize - 1;
+                    query = query.range(from, to);
+
+                    const { data: studentsData, count, error } = await query;
+                    if (error || !studentsData) {
+                        console.error('Error fetching students page:', error);
+                        return { count: 0 };
+                    }
+
+                    const studentIds = studentsData.map(s => s.id);
+                    let assignData: any[] = [];
+                    if (studentIds.length > 0) {
+                        const { data: aData } = await supabase.from('assignments').select('*').in('student_id', studentIds);
+                        assignData = aData || [];
+                    }
+
+                    const parsedStudents: Student[] = studentsData.map(s => {
+                        const sAssigns = assignData.filter(a => a.student_id === s.id);
                         const assignmentsObj: any = {};
                         sAssigns.forEach(a => {
                             assignmentsObj[a.list_id] = {
@@ -252,10 +370,288 @@ export const useStore = create<AppState>()(
                             };
                         });
                         return {
-                            id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: assignmentsObj
+                            id: s.id,
+                            name: s.name,
+                            stage: s.stage,
+                            department: s.department as Department,
+                            studyType: s.study_type as StudyType,
+                            assignments: assignmentsObj
                         };
                     });
-                    set({ students: parsedStudents });
+
+                    set({
+                        students: parsedStudents,
+                        totalStudentsCount: count ?? 0
+                    });
+
+                    return { count: count ?? 0 };
+                } catch (e) {
+                    console.error('fetchStudentsPage exception:', e);
+                    return { count: 0 };
+                }
+            },
+
+            fetchCourseStudentsPage: async ({
+                courseId,
+                page,
+                pageSize,
+                searchTerm,
+                deptFilter,
+                stageFilter,
+                studyTypeFilter,
+                sortField,
+                sortDirection = 'asc'
+            }) => {
+                try {
+                    const currentUser = get().currentUser;
+                    const isViewer = currentUser?.role === 'Viewer';
+                    const allowedDepartments = currentUser?.allowedDepartments || [];
+
+                    if (isViewer && allowedDepartments.length === 0) {
+                        return { students: [], totalCount: 0 };
+                    }
+
+                    let query = supabase
+                        .from('assignments')
+                        .select(`
+                            student_id,
+                            list_id,
+                            assigned_date,
+                            assigned_by_user_id,
+                            assigned_by_user_name,
+                            students!inner (
+                                id,
+                                name,
+                                stage,
+                                department,
+                                study_type
+                            )
+                        `, { count: 'exact' })
+                        .eq('list_id', courseId);
+
+                    // 1. Viewer restriction: enforce at database query level
+                    if (isViewer) {
+                        query = query.in('students.department', allowedDepartments);
+                    }
+
+                    // 2. Department filter
+                    if (deptFilter && deptFilter !== 'All') {
+                        query = query.eq('students.department', deptFilter);
+                    }
+
+                    // 3. Stage filter
+                    if (stageFilter && stageFilter !== 'All') {
+                        query = query.eq('students.stage', stageFilter);
+                    }
+
+                    // 4. Study Type filter
+                    if (studyTypeFilter && studyTypeFilter !== 'All') {
+                        query = query.eq('students.study_type', studyTypeFilter);
+                    }
+
+                    // 5. Search term (Arabic regex)
+                    if (searchTerm && searchTerm.trim()) {
+                        const pattern = buildArabicRegexPattern(searchTerm);
+                        query = query.filter('students.name', 'imatch', pattern);
+                    }
+
+                    // 6. Sorting
+                    if (sortField === 'name') {
+                        query = query.order('students(name)', { ascending: sortDirection === 'asc' });
+                    } else if (sortField === 'stage') {
+                        query = query.order('students(stage)', { ascending: sortDirection === 'asc' });
+                    } else if (sortField === 'department') {
+                        query = query.order('students(department)', { ascending: sortDirection === 'asc' });
+                    } else if (sortField === 'studyType') {
+                        query = query.order('students(study_type)', { ascending: sortDirection === 'asc' });
+                    } else if (sortField === 'assignedBy') {
+                        query = query.order('assigned_by_user_name', { ascending: sortDirection === 'asc' });
+                    } else {
+                        // Default or 'date'
+                        query = query.order('assigned_date', { ascending: sortDirection === 'asc' });
+                    }
+
+                    // 7. Pagination Range
+                    const from = (page - 1) * pageSize;
+                    const to = from + pageSize - 1;
+                    query = query.range(from, to);
+
+                    const { data, count, error } = await query;
+                    if (error || !data) {
+                        console.error('fetchCourseStudentsPage error:', error);
+                        return { students: [], totalCount: 0 };
+                    }
+
+                    const parsedStudents: Student[] = data.map((item: any) => {
+                        const s = item.students;
+                        return {
+                            id: s.id,
+                            name: s.name,
+                            stage: s.stage,
+                            department: s.department as Department,
+                            studyType: s.study_type as StudyType,
+                            assignments: {
+                                [courseId]: {
+                                    date: item.assigned_date,
+                                    assignedByUserId: item.assigned_by_user_id,
+                                    assignedByUserName: item.assigned_by_user_name
+                                }
+                            }
+                        };
+                    });
+
+                    return { students: parsedStudents, totalCount: count ?? 0 };
+                } catch (err) {
+                    console.error('fetchCourseStudentsPage exception:', err);
+                    return { students: [], totalCount: 0 };
+                }
+            },
+
+            fetchCourseAllStudentsForExport: async ({
+                courseId,
+                searchTerm,
+                deptFilter,
+                stageFilter,
+                studyTypeFilter
+            }) => {
+                try {
+                    const currentUser = get().currentUser;
+                    const isViewer = currentUser?.role === 'Viewer';
+                    const allowedDepartments = currentUser?.allowedDepartments || [];
+
+                    if (isViewer && allowedDepartments.length === 0) {
+                        return [];
+                    }
+
+                    let allStudents: Student[] = [];
+                    let from = 0;
+                    const batchSize = 1000;
+
+                    while (true) {
+                        let query = supabase
+                            .from('assignments')
+                            .select(`
+                                student_id,
+                                list_id,
+                                assigned_date,
+                                assigned_by_user_id,
+                                assigned_by_user_name,
+                                students!inner (
+                                    id,
+                                    name,
+                                    stage,
+                                    department,
+                                    study_type
+                                )
+                            `)
+                            .eq('list_id', courseId)
+                            .order('assigned_date', { ascending: true })
+                            .range(from, from + batchSize - 1);
+
+                        if (isViewer) {
+                            query = query.in('students.department', allowedDepartments);
+                        }
+                        if (deptFilter && deptFilter !== 'All') {
+                            query = query.eq('students.department', deptFilter);
+                        }
+                        if (stageFilter && stageFilter !== 'All') {
+                            query = query.eq('students.stage', stageFilter);
+                        }
+                        if (studyTypeFilter && studyTypeFilter !== 'All') {
+                            query = query.eq('students.study_type', studyTypeFilter);
+                        }
+                        if (searchTerm && searchTerm.trim()) {
+                            const pattern = buildArabicRegexPattern(searchTerm);
+                            query = query.filter('students.name', 'imatch', pattern);
+                        }
+
+                        const { data, error } = await query;
+                        if (error || !data || data.length === 0) break;
+
+                        const parsed: Student[] = data.map((item: any) => {
+                            const s = item.students;
+                            return {
+                                id: s.id,
+                                name: s.name,
+                                stage: s.stage,
+                                department: s.department as Department,
+                                studyType: s.study_type as StudyType,
+                                assignments: {
+                                    [courseId]: {
+                                        date: item.assigned_date,
+                                        assignedByUserId: item.assigned_by_user_id,
+                                        assignedByUserName: item.assigned_by_user_name
+                                    }
+                                }
+                            };
+                        });
+
+                        allStudents.push(...parsed);
+                        if (data.length < batchSize) break;
+                        from += batchSize;
+                    }
+
+                    return allStudents;
+                } catch (err) {
+                    console.error('fetchCourseAllStudentsForExport exception:', err);
+                    return [];
+                }
+            },
+
+            fetchCourseStudents: async (courseId) => {
+                // Kept for backward compatibility, uses secure join
+                const { students } = await get().fetchCourseStudentsPage({
+                    courseId,
+                    page: 1,
+                    pageSize: 1000
+                });
+                set(state => ({
+                    courseStudents: { ...state.courseStudents, [courseId]: students }
+                }));
+                return students;
+            },
+
+            initRealtime: async () => {
+                const currentUser = get().currentUser;
+                if (!currentUser) return;
+                if (get().isInitialized || isInitializing) return;
+                isInitializing = true;
+
+                const isViewer = currentUser?.role === 'Viewer';
+                const isAdmin = currentUser?.role === 'Admin';
+
+                // ONLY Admins need to fetch app_users for settings/user management.
+                // Operators and Viewers MUST NOT fetch or see other users, admin emails, or account assignments.
+                const usersPromise = isAdmin
+                    ? fetchAllRecords('app_users')
+                    : Promise.resolve({ data: [] });
+
+                // For Viewers, restrict departments to their allowed departments directly.
+                // Do NOT query all departments across the system.
+                const deptPromise = (isViewer && currentUser.allowedDepartments && currentUser.allowedDepartments.length > 0)
+                    ? Promise.resolve({ data: currentUser.allowedDepartments.map(d => ({ name: d })) })
+                    : supabase.from('departments').select('*').order('name');
+
+                // 1. Initial lightweight configuration fetch (NO app_users for Operators/Viewers, NO unnecessary stage queries)
+                const [usersRes, settingsRes, deptRes] = await Promise.all([
+                    usersPromise,
+                    supabase.from('settings').select('*').eq('id', 1).single(),
+                    deptPromise
+                ]);
+
+                if (deptRes.data) {
+                    set({ departments: deptRes.data.map((d: any) => d.name) });
+                }
+
+                // Standardized stages: always 1 to 6 without querying students table
+                set({ stages: ['1', '2', '3', '4', '5', '6'] });
+
+                if (usersRes.data) {
+                    const parsedUsers = usersRes.data.map((u: any) => ({
+                        id: u.id, name: u.name, email: u.email, role: u.role as Role,
+                        allowedDepartments: u.allowed_departments as Department[] | undefined
+                    }));
+                    set({ users: parsedUsers });
                 }
 
                 if (settingsRes.data) {
@@ -267,16 +663,61 @@ export const useStore = create<AppState>()(
                     });
                 }
 
+                // Admins and Operators calculate stats with zero-payload head counts
+                if (!isViewer) {
+                    await get().refreshStats();
+                    // Fetch initial page 1 of students
+                    await get().fetchStudentsPage({
+                        page: 1,
+                        pageSize: 10,
+                        sortField: null,
+                        sortDirection: 'asc'
+                    });
+                }
+
                 set({ isInitialized: true });
 
-                // 2. Setup Realtime Subscriptions (Single Channel for better reliability)
+                // Unsubscribe and clean up any previous channel
+                if (activeRealtimeChannel) {
+                    try {
+                        await supabase.removeChannel(activeRealtimeChannel);
+                    } catch (e) {
+                        console.error('Error removing previous channel:', e);
+                    }
+                    activeRealtimeChannel = null;
+                }
+
+                // 2. Setup Realtime Subscriptions (Single Channel for reliability)
                 const channel = supabase.channel('schema-db-changes');
+                activeRealtimeChannel = channel;
 
                 channel.on('postgres_changes', { event: '*', schema: 'public', table: 'app_users' }, (payload) => {
                     const u = payload.new as any;
+                    const current = get().currentUser;
+
+                    // Non-admins only care if their own profile was updated
+                    if (current && current.role !== 'Admin') {
+                        if (payload.eventType === 'UPDATE' && current.id === u.id) {
+                            const updatedUser = {
+                                id: u.id,
+                                name: u.name,
+                                email: u.email,
+                                role: u.role as Role,
+                                allowedDepartments: u.allowed_departments as Department[] | undefined
+                            };
+                            set({ currentUser: updatedUser });
+                            if (current.role === 'Viewer' && updatedUser.role === 'Viewer') {
+                                get().refreshViewerData();
+                            } else if (current.role !== updatedUser.role) {
+                                get().initRealtime();
+                            }
+                        }
+                        return;
+                    }
+
+                    // Admin user management state updates
                     if (payload.eventType === 'INSERT') {
                         set(state => {
-                            // Check if already exists to prevent duplicate optimistic updates
                             if (state.users.some(existing => existing.id === u.id)) return state;
                             return { users: [...state.users, { id: u.id, name: u.name, email: u.email, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined }] };
                         });
@@ -284,16 +725,11 @@ export const useStore = create<AppState>()(
                         const updatedUser = { id: u.id, name: u.name, email: u.email, role: u.role as Role, allowedDepartments: u.allowed_departments as Department[] | undefined };
                         set(state => ({ users: state.users.map(user => user.id === u.id ? updatedUser : user) }));
 
-                        // If the updated user is the currently logged in user, update the current user object
-                        const currentUser = get().currentUser;
-                        if (currentUser && currentUser.id === u.id) {
+                        if (current && current.id === u.id) {
                             set({ currentUser: updatedUser });
-                            // If the user's role changed to something else, or if their departments changed, we might need to refresh their data directly
-                            if (currentUser.role === 'Viewer' && updatedUser.role === 'Viewer') {
-                                // If they are still a viewer, their allowed departments might have changed. Re-fetch.
+                            if (current.role === 'Viewer' && updatedUser.role === 'Viewer') {
                                 get().refreshViewerData();
-                            } else if (currentUser.role !== updatedUser.role) {
-                                // If role changed entirely, fully re-init
+                            } else if (current.role !== updatedUser.role) {
                                 get().initRealtime();
                             }
                         }
@@ -303,161 +739,137 @@ export const useStore = create<AppState>()(
                 });
 
                 channel.on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, async (payload) => {
-                    const s = payload.new as any;
-
-                    // Filter incoming events for viewers
-                    const currentUser = get().currentUser;
-                    const isViewer = currentUser?.role === 'Viewer';
-                    const allowedDepartments = currentUser?.allowedDepartments || [];
-
-                    if (isViewer && payload.eventType !== 'DELETE') {
-                        if (!allowedDepartments.includes(s.department)) {
-                            // Student's department changed to one this viewer cannot see.
-                            // Remove them from the viewer's local state so they disappear immediately.
-                            set(state => ({ students: state.students.filter(st => st.id !== s.id) }));
-                            return;
-                        }
-                    }
-
-                    if (payload.eventType === 'INSERT') {
-                        set(state => {
-                            if (state.students.some(st => st.id === s.id)) return state;
-                            return { students: [...state.students, { id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: {} }] };
-                        });
-                    } else if (payload.eventType === 'UPDATE') {
-                        const existsInState = get().students.some(st => st.id === s.id);
-
-                        if (existsInState) {
-                            // Student already in state — just update their fields
-                            set(state => ({
-                                students: state.students.map(st => st.id === s.id
-                                    ? { ...st, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType }
-                                    : st
-                                )
-                            }));
-                        } else if (isViewer && allowedDepartments.includes(s.department)) {
-                            // Student was moved INTO this viewer's allowed department but wasn't in local state.
-                            // Fetch their assignments so we can show them immediately without a reload.
-                            const { data: assignRes } = await supabase.from('assignments').select('*').eq('student_id', s.id);
-                            const assignmentsObj: any = {};
-                            (assignRes || []).forEach((a: any) => {
-                                assignmentsObj[a.list_id] = {
-                                    date: a.assigned_date,
-                                    assignedByUserId: a.assigned_by_user_id,
-                                    assignedByUserName: a.assigned_by_user_name
-                                };
-                            });
-                            // Only add if they have at least one assignment (viewer lists only show assigned students)
-                            if (Object.keys(assignmentsObj).length > 0) {
-                                set(state => {
-                                    if (state.students.some(st => st.id === s.id)) return state;
-                                    return {
-                                        students: [...state.students, {
-                                            id: s.id, name: s.name, stage: s.stage,
-                                            department: s.department as Department,
-                                            studyType: s.study_type as StudyType,
-                                            assignments: assignmentsObj
-                                        }]
-                                    };
-                                });
+                    if (payload.eventType === 'UPDATE') {
+                        const s = payload.new as any;
+                        set(state => ({
+                            students: state.students.map(st => st.id === s.id ? {
+                                ...st,
+                                name: s.name,
+                                stage: s.stage,
+                                department: s.department as Department,
+                                studyType: s.study_type as StudyType
+                            } : st),
+                            courseStudents: {
+                                L1: (state.courseStudents.L1 || []).map(st => st.id === s.id ? { ...st, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType } : st),
+                                L2: (state.courseStudents.L2 || []).map(st => st.id === s.id ? { ...st, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType } : st),
+                                L3: (state.courseStudents.L3 || []).map(st => st.id === s.id ? { ...st, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType } : st),
+                                L4: (state.courseStudents.L4 || []).map(st => st.id === s.id ? { ...st, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType } : st),
                             }
-                        }
+                        }));
+                    } else if (payload.eventType === 'INSERT') {
+                        set(state => ({ totalStudentsCount: state.totalStudentsCount + 1 }));
                     } else if (payload.eventType === 'DELETE') {
-                        set(state => ({ students: state.students.filter(st => st.id !== payload.old.id) }));
+                        const oldId = payload.old.id;
+                        set(state => ({
+                            totalStudentsCount: Math.max(0, state.totalStudentsCount - 1),
+                            students: state.students.filter(st => st.id !== oldId),
+                            courseStudents: {
+                                L1: (state.courseStudents.L1 || []).filter(s => s.id !== oldId),
+                                L2: (state.courseStudents.L2 || []).filter(s => s.id !== oldId),
+                                L3: (state.courseStudents.L3 || []).filter(s => s.id !== oldId),
+                                L4: (state.courseStudents.L4 || []).filter(s => s.id !== oldId),
+                            }
+                        }));
                     }
                 });
 
                 channel.on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, async (payload) => {
                     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                         const newA = payload.new as any;
-                        const currentState = get();
-                        let studentExists = currentState.students.some(st => st.id === newA.student_id);
+                        const listId = newA.list_id as 'L1' | 'L2' | 'L3' | 'L4';
 
-                        // If student doesn't exist in our store, we might need to fetch them (especially for Viewer role)
-                        if (!studentExists) {
-                            const { data: studentData, error } = await supabase.from('students').select('*').eq('id', newA.student_id).single();
-
-                            if (studentData && !error) {
-                                const currentUser = get().currentUser;
-                                const isViewer = currentUser?.role === 'Viewer';
-                                const allowedDepartments = currentUser?.allowedDepartments || [];
-
-                                // If viewer and department is allowed, or if not viewer, add the student
-                                if (!isViewer || allowedDepartments.includes(studentData.department)) {
-                                    set(state => {
-                                        // Double check they weren't added while we were fetching
-                                        if (state.students.some(st => st.id === newA.student_id)) return state;
-
-                                        const newStudent: Student = {
-                                            id: studentData.id,
-                                            name: studentData.name,
-                                            stage: studentData.stage,
-                                            department: studentData.department as Department,
-                                            studyType: studentData.study_type as StudyType,
-                                            assignments: {
-                                                [newA.list_id]: {
-                                                    date: newA.assigned_date,
-                                                    assignedByUserId: newA.assigned_by_user_id,
-                                                    assignedByUserName: newA.assigned_by_user_name
-                                                }
-                                            }
-                                        };
-                                        return { students: [...state.students, newStudent] };
-                                    });
-                                    studentExists = true; // Mark as existing so the map below doesn't need to run but it's fine if it does (it'll just update it to the exact same thing)
-                                }
-                            }
-                        }
-
-                        // If the student exists or was just added above, update their assignments
                         set(state => {
-                            return {
-                                students: state.students.map(st => {
-                                    if (st.id === newA.student_id) {
-                                        return {
-                                            ...st,
-                                            assignments: {
-                                                ...st.assignments,
-                                                [newA.list_id]: {
-                                                    date: newA.assigned_date,
-                                                    assignedByUserId: newA.assigned_by_user_id,
-                                                    assignedByUserName: newA.assigned_by_user_name
-                                                }
+                            const hasStudent = state.students.some(st => st.id === newA.student_id);
+                            const alreadyAssignedInList = hasStudent && !!(state.students.find(st => st.id === newA.student_id)?.assignments as any)?.[listId];
+
+                            const updatedStudents = hasStudent ? state.students.map(st => {
+                                if (st.id === newA.student_id) {
+                                    return {
+                                        ...st,
+                                        assignments: {
+                                            ...st.assignments,
+                                            [listId]: {
+                                                date: newA.assigned_date,
+                                                assignedByUserId: newA.assigned_by_user_id,
+                                                assignedByUserName: newA.assigned_by_user_name
                                             }
-                                        };
+                                        }
+                                    };
+                                }
+                                return st;
+                            }) : state.students;
+
+                            const currentList = state.courseStudents[listId] || [];
+                            const updatedCourseStudents = currentList.some(s => s.id === newA.student_id) ? {
+                                ...state.courseStudents,
+                                [listId]: currentList.map(s => s.id === newA.student_id ? {
+                                    ...s,
+                                    assignments: {
+                                        ...s.assignments,
+                                        [listId]: {
+                                            date: newA.assigned_date,
+                                            assignedByUserId: newA.assigned_by_user_id,
+                                            assignedByUserName: newA.assigned_by_user_name
+                                        }
                                     }
-                                    return st;
-                                })
+                                } : s)
+                            } : state.courseStudents;
+
+                            const updatedStats = alreadyAssignedInList ? state.stats : {
+                                ...state.stats,
+                                totalAssigned: state.stats.totalAssigned + 1,
+                                assignedToday: state.stats.assignedToday + 1,
+                                byList: {
+                                    ...state.stats.byList,
+                                    [listId]: (state.stats.byList[listId] || 0) + 1
+                                }
+                            };
+
+                            return {
+                                students: updatedStudents,
+                                courseStudents: updatedCourseStudents,
+                                stats: updatedStats,
+                                courseDataVersion: state.courseDataVersion + 1
                             };
                         });
                     } else if (payload.eventType === 'DELETE') {
                         const oldA = payload.old as any;
-                        set(state => {
-                            const currentUser = state.currentUser;
-                            const isViewer = currentUser?.role === 'Viewer';
+                        const listId = oldA.list_id as 'L1' | 'L2' | 'L3' | 'L4';
 
-                            const newStudents = state.students.map(st => {
+                        set(state => {
+                            const hasStudent = state.students.some(st => st.id === oldA.student_id);
+                            const wasAssignedInList = hasStudent && !!(state.students.find(st => st.id === oldA.student_id)?.assignments as any)?.[listId];
+
+                            const updatedStudents = hasStudent ? state.students.map(st => {
                                 if (st.id === oldA.student_id) {
                                     const newAssignments = { ...st.assignments };
                                     delete (newAssignments as any)[oldA.list_id];
                                     return { ...st, assignments: newAssignments };
                                 }
                                 return st;
-                            });
+                            }) : state.students;
 
-                            // If viewer, filter out students that no longer have any assignments
-                            if (isViewer) {
-                                return {
-                                    students: newStudents.filter(st => {
-                                        if (st.id === oldA.student_id) {
-                                            return Object.keys(st.assignments).length > 0;
-                                        }
-                                        return true; // Keep others as is
-                                    })
-                                };
-                            }
+                            const updatedCourseStudents = listId ? {
+                                ...state.courseStudents,
+                                [listId]: (state.courseStudents[listId] || []).filter(s => s.id !== oldA.student_id)
+                            } : state.courseStudents;
 
-                            return { students: newStudents };
+                            const updatedStats = wasAssignedInList ? {
+                                ...state.stats,
+                                totalAssigned: Math.max(0, state.stats.totalAssigned - 1),
+                                assignedToday: Math.max(0, state.stats.assignedToday - 1),
+                                byList: {
+                                    ...state.stats.byList,
+                                    [listId]: Math.max(0, (state.stats.byList[listId] || 0) - 1)
+                                }
+                            } : state.stats;
+
+                            return {
+                                students: updatedStudents,
+                                courseStudents: updatedCourseStudents,
+                                stats: updatedStats,
+                                courseDataVersion: state.courseDataVersion + 1
+                            };
                         });
                     }
                 });
@@ -476,49 +888,8 @@ export const useStore = create<AppState>()(
             },
 
             refreshViewerData: async () => {
-                const currentUser = get().currentUser;
-                if (!currentUser || currentUser.role !== 'Viewer') return;
-
-                const allowedDepartments = currentUser.allowedDepartments || [];
-
-                // Fetch assignments first
-                const assignRes = await fetchAllRecords('assignments');
-
-                let studentsRes: { data: any[] };
-                const assignedStudentIds = Array.from(new Set((assignRes.data || []).map(a => a.student_id)));
-                if (assignedStudentIds.length === 0 || allowedDepartments.length === 0) {
-                    studentsRes = { data: [] };
-                } else {
-                    const BATCH_SIZE = 500;
-                    const promises = [];
-                    for (let i = 0; i < assignedStudentIds.length; i += BATCH_SIZE) {
-                        const chunk = assignedStudentIds.slice(i, i + BATCH_SIZE);
-                        const query = supabase.from('students').select('*')
-                            .in('id', chunk)
-                            .in('department', allowedDepartments);
-                        promises.push(query);
-                    }
-                    const results = await Promise.all(promises);
-                    studentsRes = { data: results.flatMap(r => r.data || []) };
-                }
-
-                if (studentsRes.data && assignRes.data) {
-                    const parsedStudents: Student[] = studentsRes.data.map(s => {
-                        const sAssigns = assignRes.data.filter(a => a.student_id === s.id);
-                        const assignmentsObj: any = {};
-                        sAssigns.forEach(a => {
-                            assignmentsObj[a.list_id] = {
-                                date: a.assigned_date,
-                                assignedByUserId: a.assigned_by_user_id,
-                                assignedByUserName: a.assigned_by_user_name
-                            };
-                        });
-                        return {
-                            id: s.id, name: s.name, stage: s.stage, department: s.department as Department, studyType: s.study_type as StudyType, assignments: assignmentsObj
-                        };
-                    });
-                    set({ students: parsedStudents });
-                }
+                // Course lists are lazy loaded on demand with strict department filtering at database level
+                set(state => ({ courseDataVersion: state.courseDataVersion + 1 }));
             },
 
             login: async (email, password) => {
@@ -550,6 +921,18 @@ export const useStore = create<AppState>()(
             },
             logout: async () => {
                 isInitializing = false;
+                if (refreshStatsTimeout) {
+                    clearTimeout(refreshStatsTimeout);
+                    refreshStatsTimeout = null;
+                }
+                if (activeRealtimeChannel) {
+                    try {
+                        await supabase.removeChannel(activeRealtimeChannel);
+                    } catch (e) {
+                        console.error('Error removing active channel:', e);
+                    }
+                    activeRealtimeChannel = null;
+                }
                 try {
                     await supabase.removeAllChannels();
                 } catch (err) {
@@ -565,8 +948,13 @@ export const useStore = create<AppState>()(
                     sessionExpiresAt: null,
                     isInitialized: false,
                     students: [],
+                    totalStudentsCount: 0,
+                    stats: { totalAssigned: 0, assignedToday: 0, byList: { L1: 0, L2: 0, L3: 0, L4: 0 } },
+                    courseStudents: { L1: [], L2: [], L3: [], L4: [] },
+                    courseDataVersion: 0,
                     users: [],
-                    departments: []
+                    departments: [],
+                    stages: ['1', '2', '3', '4', '5', '6']
                 });
                 if (typeof window !== 'undefined') {
                     try {
@@ -701,13 +1089,28 @@ export const useStore = create<AppState>()(
                         get().showAlert('Access Denied', 'Only administrators can remove assignments.', 'error');
                         return;
                     }
-                    // Optimistic update
+                    // Optimistic in-memory update (including stats)
                     set(state => {
                         const std = state.students.find(s => s.id === studentId);
                         if (!std) return state;
                         const newAssigns = { ...std.assignments };
                         delete (newAssigns as any)[list];
-                        return { students: state.students.map(s => s.id === studentId ? { ...s, assignments: newAssigns } : s) };
+                        return {
+                            students: state.students.map(s => s.id === studentId ? { ...s, assignments: newAssigns } : s),
+                            courseStudents: {
+                                ...state.courseStudents,
+                                [list]: (state.courseStudents[list] || []).filter(s => s.id !== studentId)
+                            },
+                            stats: {
+                                ...state.stats,
+                                totalAssigned: Math.max(0, state.stats.totalAssigned - 1),
+                                assignedToday: Math.max(0, state.stats.assignedToday - 1),
+                                byList: {
+                                    ...state.stats.byList,
+                                    [list]: Math.max(0, (state.stats.byList[list] || 0) - 1)
+                                }
+                            }
+                        };
                     });
                     await supabase.from('assignments').delete().eq('student_id', studentId).eq('list_id', list);
                 } else {
@@ -718,7 +1121,7 @@ export const useStore = create<AppState>()(
                         assigned_by_user_name: user.name,
                         assigned_date: new Date().toISOString()
                     };
-                    // Optimistic update
+                    // Optimistic in-memory update (including stats)
                     set(state => {
                         const std = state.students.find(s => s.id === studentId);
                         if (!std) return state;
@@ -728,7 +1131,16 @@ export const useStore = create<AppState>()(
                                     ...s.assignments,
                                     [list]: { date: newAssignment.assigned_date, assignedByUserId: user.id, assignedByUserName: user.name }
                                 }
-                            } : s)
+                            } : s),
+                            stats: {
+                                ...state.stats,
+                                totalAssigned: state.stats.totalAssigned + 1,
+                                assignedToday: state.stats.assignedToday + 1,
+                                byList: {
+                                    ...state.stats.byList,
+                                    [list]: (state.stats.byList[list] || 0) + 1
+                                }
+                            }
                         };
                     });
                     await supabase.from('assignments').insert(newAssignment);
@@ -740,31 +1152,69 @@ export const useStore = create<AppState>()(
                     get().showAlert('Access Denied', 'Only administrators can remove assignments.', 'error');
                     return;
                 }
-                // Optimistic
+                // Optimistic in-memory update (including stats)
                 set(state => {
                     const std = state.students.find(s => s.id === studentId);
                     if (!std) return state;
                     const newAssigns = { ...std.assignments };
                     delete (newAssigns as any)[list];
-                    return { students: state.students.map(s => s.id === studentId ? { ...s, assignments: newAssigns } : s) };
+                    return {
+                        students: state.students.map(s => s.id === studentId ? { ...s, assignments: newAssigns } : s),
+                        courseStudents: {
+                            ...state.courseStudents,
+                            [list]: (state.courseStudents[list] || []).filter(s => s.id !== studentId)
+                        },
+                        stats: {
+                            ...state.stats,
+                            totalAssigned: Math.max(0, state.stats.totalAssigned - 1),
+                            assignedToday: Math.max(0, state.stats.assignedToday - 1),
+                            byList: {
+                                ...state.stats.byList,
+                                [list]: Math.max(0, (state.stats.byList[list] || 0) - 1)
+                            }
+                        }
+                    };
                 });
                 await supabase.from('assignments').delete().eq('student_id', studentId).eq('list_id', list);
             },
 
             clearAllAssignments: async () => {
                 set(state => ({
-                    students: state.students.map(s => ({ ...s, assignments: {} }))
+                    students: state.students.map(s => ({ ...s, assignments: {} })),
+                    courseStudents: { L1: [], L2: [], L3: [], L4: [] },
+                    stats: {
+                        totalAssigned: 0,
+                        assignedToday: 0,
+                        byList: { L1: 0, L2: 0, L3: 0, L4: 0 }
+                    },
+                    courseDataVersion: state.courseDataVersion + 1
                 }));
                 await supabase.from('assignments').delete().neq('student_id', '00000000-0000-0000-0000-000000000000'); // Delete all
             },
             clearAssignmentsByList: async (list) => {
-                set(state => ({
-                    students: state.students.map(s => {
-                        const newAssigns = { ...s.assignments };
-                        delete (newAssigns as any)[list];
-                        return { ...s, assignments: newAssigns };
-                    })
-                }));
+                set(state => {
+                    const listCount = state.stats.byList[list] || 0;
+                    return {
+                        students: state.students.map(s => {
+                            const newAssigns = { ...s.assignments };
+                            delete (newAssigns as any)[list];
+                            return { ...s, assignments: newAssigns };
+                        }),
+                        courseStudents: {
+                            ...state.courseStudents,
+                            [list]: []
+                        },
+                        stats: {
+                            ...state.stats,
+                            totalAssigned: Math.max(0, state.stats.totalAssigned - listCount),
+                            byList: {
+                                ...state.stats.byList,
+                                [list]: 0
+                            }
+                        },
+                        courseDataVersion: state.courseDataVersion + 1
+                    };
+                });
                 await supabase.from('assignments').delete().eq('list_id', list);
             },
             clearAssignmentsByDepartment: async (dept) => {
@@ -772,12 +1222,19 @@ export const useStore = create<AppState>()(
                     students: state.students.map(s => {
                         if (s.department !== dept) return s;
                         return { ...s, assignments: {} };
-                    })
+                    }),
+                    courseStudents: {
+                        L1: (state.courseStudents.L1 || []).filter(s => s.department !== dept),
+                        L2: (state.courseStudents.L2 || []).filter(s => s.department !== dept),
+                        L3: (state.courseStudents.L3 || []).filter(s => s.department !== dept),
+                        L4: (state.courseStudents.L4 || []).filter(s => s.department !== dept),
+                    }
                 }));
                 const studentsInDept = get().students.filter(s => s.department === dept);
                 if (studentsInDept.length === 0) return;
                 const ids = studentsInDept.map(s => s.id);
                 await supabase.from('assignments').delete().in('student_id', ids);
+                get().refreshStats();
             },
 
             setL1Enabled: async (enabled) => {

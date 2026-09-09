@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useStore, Student } from '../../lib/store';
+import { useStore, Student, fetchAllRecords } from '../../lib/store';
 import { useRouter } from 'next/navigation';
 import { Download, Users, CheckCircle, Clock, Percent, BarChart3, LayoutGrid, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -10,6 +10,15 @@ import {
     Cell as RechartsCell
 } from 'recharts';
 import Dropdown from '../../components/Dropdown';
+import ExportLoadingModal from '../../components/ExportLoadingModal';
+
+const formatStage = (stage: string | undefined): string => {
+    if (!stage) return '-';
+    const clean = stage.trim();
+    if (clean.startsWith('المرحلة')) return clean;
+    if (clean.includes('Stage')) return clean.replace('Stage', 'المرحلة');
+    return `المرحلة ${clean}`;
+};
 
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -39,15 +48,64 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function ReportsPage() {
     const router = useRouter();
-    const { currentUser, students, departments, showAlert, isInitialized, isHydrated } = useStore();
+    const { currentUser, departments, showAlert, isInitialized, isHydrated } = useStore();
     const [mounted, setMounted] = useState(false);
     const [chartView, setChartView] = useState<'List' | 'Department'>('List');
+    const [students, setStudents] = useState<Student[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
 
     useEffect(() => {
         setMounted(true);
         if (!currentUser || currentUser.role !== 'Admin') {
             router.push('/');
+            return;
         }
+
+        let isCancelled = false;
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const [stdRes, assignRes] = await Promise.all([
+                    fetchAllRecords('students'),
+                    fetchAllRecords('assignments')
+                ]);
+
+                const assignData = assignRes.data || [];
+                const studentsData = stdRes.data || [];
+
+                const parsed: Student[] = studentsData.map((s: any) => {
+                    const sAssigns = assignData.filter((a: any) => a.student_id === s.id);
+                    const assignmentsObj: any = {};
+                    sAssigns.forEach((a: any) => {
+                        assignmentsObj[a.list_id] = {
+                            date: a.assigned_date,
+                            assignedByUserId: a.assigned_by_user_id,
+                            assignedByUserName: a.assigned_by_user_name
+                        };
+                    });
+                    return {
+                        id: s.id,
+                        name: s.name,
+                        stage: s.stage,
+                        department: s.department,
+                        studyType: s.study_type,
+                        assignments: assignmentsObj
+                    };
+                });
+
+                if (!isCancelled) {
+                    setStudents(parsed);
+                }
+            } catch (err) {
+                console.error('ReportsPage error loading data:', err);
+            } finally {
+                if (!isCancelled) setIsLoading(false);
+            }
+        };
+
+        loadData();
+        return () => { isCancelled = true; };
     }, [currentUser, router]);
 
     const stats = useMemo(() => {
@@ -91,87 +149,95 @@ export default function ReportsPage() {
 
     const COLORS = ['#137fec', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
-    const exportStats = () => {
-        const workbook = XLSX.utils.book_new();
+    const exportStats = async () => {
+        setIsExporting(true);
+        try {
+            await new Promise(r => setTimeout(r, 400));
+            const workbook = XLSX.utils.book_new();
 
-        // 1. Summary Sheet
-        const summaryData: any[] = [];
+            // 1. Summary Sheet
+            const summaryData: any[] = [];
 
-        summaryData.push({ Category: 'OVERALL', Metric: 'إجمالي الطلاب', Value: stats.total });
-        summaryData.push({ Category: 'OVERALL', Metric: 'الطلاب المباشرين (أي Course)', Value: stats.assigned });
-        summaryData.push({ Category: 'OVERALL', Metric: 'الطلاب غير المباشرين', Value: stats.total - stats.assigned });
-        summaryData.push({ Category: '', Metric: '', Value: '' });
-
-        // List Stats
-        (['L1', 'L2', 'L3', 'L4'] as const).forEach(list => {
-            const assignedToList = students.filter(s => !!s.assignments[list]).length;
-            const notAssignedToList = stats.total - assignedToList;
-            const percentage = stats.total > 0 ? ((assignedToList / stats.total) * 100).toFixed(1) + '%' : '0%';
-
-            summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'المباشرين', Value: assignedToList });
-            summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'غير المباشرين', Value: notAssignedToList });
-            summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'نسبة المباشرة', Value: percentage });
+            summaryData.push({ Category: 'OVERALL', Metric: 'إجمالي الطلاب', Value: stats.total });
+            summaryData.push({ Category: 'OVERALL', Metric: 'الطلاب المباشرين (أي Course)', Value: stats.assigned });
+            summaryData.push({ Category: 'OVERALL', Metric: 'الطلاب غير المباشرين', Value: stats.total - stats.assigned });
             summaryData.push({ Category: '', Metric: '', Value: '' });
-        });
 
-        // Dept Stats
-        departments.forEach((dept: string) => {
-            const inDept = students.filter(s => s.department === dept);
-            const totalInDept = inDept.length;
-            const assignedInDept = inDept.filter(s => Object.keys(s.assignments).length > 0).length;
-            const notAssignedInDept = totalInDept - assignedInDept;
-            const percentage = totalInDept > 0 ? ((assignedInDept / totalInDept) * 100).toFixed(1) + '%' : '0%';
+            // List Stats
+            (['L1', 'L2', 'L3', 'L4'] as const).forEach(list => {
+                const assignedToList = students.filter(s => !!s.assignments[list]).length;
+                const notAssignedToList = stats.total - assignedToList;
+                const percentage = stats.total > 0 ? ((assignedToList / stats.total) * 100).toFixed(1) + '%' : '0%';
 
-            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'إجمالي الطلاب', Value: totalInDept });
-            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'المباشرين', Value: assignedInDept });
-            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'غير المباشرين', Value: notAssignedInDept });
-            summaryData.push({ Category: `DEPT ${dept}`, Metric: 'نسبة المباشرة', Value: percentage });
-            summaryData.push({ Category: '', Metric: '', Value: '' });
-        });
+                summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'المباشرين', Value: assignedToList });
+                summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'غير المباشرين', Value: notAssignedToList });
+                summaryData.push({ Category: `Course ${list.replace('L', '')}`, Metric: 'نسبة المباشرة', Value: percentage });
+                summaryData.push({ Category: '', Metric: '', Value: '' });
+            });
 
-        const summaryWs = XLSX.utils.json_to_sheet(summaryData);
-        XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary Stats");
+            // Dept Stats
+            departments.forEach((dept: string) => {
+                const inDept = students.filter(s => s.department === dept);
+                const totalInDept = inDept.length;
+                const assignedInDept = inDept.filter(s => Object.keys(s.assignments).length > 0).length;
+                const notAssignedInDept = totalInDept - assignedInDept;
+                const percentage = totalInDept > 0 ? ((assignedInDept / totalInDept) * 100).toFixed(1) + '%' : '0%';
 
-        // 2. Sheets for Each List (Only assignments for that list)
-        (['L1', 'L2', 'L3', 'L4'] as const).forEach(list => {
-            const listStudents = students.filter(s => !!s.assignments[list]);
-            if (listStudents.length > 0) {
-                const listData = listStudents.map(s => {
-                    const meta = s.assignments[list]!;
-                    return {
-                        'اسم الطالب': s.name,
-                        'القسم': s.department,
-                        'نوع الدراسة': s.studyType,
-                        'المرحلة الدراسية': s.stage,
-                        'تاريخ المباشرة': new Date(meta.date).toLocaleDateString(),
-                        'مباشر بواسطة': meta.assignedByUserName
-                    };
-                });
-                const listWs = XLSX.utils.json_to_sheet(listData);
-                XLSX.utils.book_append_sheet(workbook, listWs, `مباشرات Course ${list.replace('L', '')}`);
-            }
-        });
+                summaryData.push({ Category: `DEPT ${dept}`, Metric: 'إجمالي الطلاب', Value: totalInDept });
+                summaryData.push({ Category: `DEPT ${dept}`, Metric: 'المباشرين', Value: assignedInDept });
+                summaryData.push({ Category: `DEPT ${dept}`, Metric: 'غير المباشرين', Value: notAssignedInDept });
+                summaryData.push({ Category: `DEPT ${dept}`, Metric: 'نسبة المباشرة', Value: percentage });
+                summaryData.push({ Category: '', Metric: '', Value: '' });
+            });
 
-        // 3. Sheets for Each Department (All students in the dept)
-        departments.forEach((dept: string) => {
-            const deptStudents = students.filter(s => s.department === dept);
-            if (deptStudents.length > 0) {
-                const deptData = deptStudents.map(s => {
-                    const assignedLists = Object.keys(s.assignments).map(l => l.replace('L', 'Course ')).join(', ') || 'غير مباشر';
-                    return {
-                        'اسم الطالب': s.name,
-                        'نوع الدراسة': s.studyType,
-                        'المرحلة الدراسية': s.stage,
-                        'المباشرات': assignedLists
-                    };
-                });
-                const deptWs = XLSX.utils.json_to_sheet(deptData);
-                const safeDeptName = dept.substring(0, 25);
-                XLSX.utils.book_append_sheet(workbook, deptWs, `قسم ${safeDeptName}`);
-            }
-        });
+            const summaryWs = XLSX.utils.json_to_sheet(summaryData);
+            XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary Stats");
 
-        XLSX.writeFile(workbook, `comprehensive_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+            // 2. Sheets for Each List (Only assignments for that list)
+            (['L1', 'L2', 'L3', 'L4'] as const).forEach(list => {
+                const listStudents = students.filter(s => !!s.assignments[list]);
+                if (listStudents.length > 0) {
+                    const listData = listStudents.map(s => {
+                        const meta = s.assignments[list]!;
+                        return {
+                            'اسم الطالب': s.name,
+                            'القسم': s.department,
+                            'نوع الدراسة': s.studyType,
+                            'المرحلة الدراسية': formatStage(s.stage),
+                            'تاريخ المباشرة': new Date(meta.date).toLocaleDateString(),
+                            'مباشر بواسطة': meta.assignedByUserName
+                        };
+                    });
+                    const listWs = XLSX.utils.json_to_sheet(listData);
+                    XLSX.utils.book_append_sheet(workbook, listWs, `مباشرات Course ${list.replace('L', '')}`);
+                }
+            });
+
+            // 3. Sheets for Each Department (All students in the dept)
+            departments.forEach((dept: string) => {
+                const deptStudents = students.filter(s => s.department === dept);
+                if (deptStudents.length > 0) {
+                    const deptData = deptStudents.map(s => {
+                        const assignedLists = Object.keys(s.assignments).map(l => l.replace('L', 'Course ')).join(', ') || 'غير مباشر';
+                        return {
+                            'اسم الطالب': s.name,
+                            'نوع الدراسة': s.studyType,
+                            'المرحلة الدراسية': formatStage(s.stage),
+                            'المباشرات': assignedLists
+                        };
+                    });
+                    const deptWs = XLSX.utils.json_to_sheet(deptData);
+                    const safeDeptName = dept.substring(0, 25);
+                    XLSX.utils.book_append_sheet(workbook, deptWs, `قسم ${safeDeptName}`);
+                }
+            });
+
+            XLSX.writeFile(workbook, `comprehensive_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+        } catch (err: any) {
+            showAlert('خطأ', 'فشل تصدير التقرير الشامل: ' + (err.message || ''), 'error');
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const [calcType, setCalcType] = useState<'List' | 'Department'>('List');
@@ -201,9 +267,10 @@ export default function ReportsPage() {
         }
     }, [students, calcType, calcSelection]);
 
-    if (!mounted || !isInitialized || !isHydrated) return (
-        <div className="flex items-center justify-center h-[50vh]">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    if (!mounted || !isInitialized || !isHydrated || isLoading) return (
+        <div className="flex flex-col items-center justify-center h-[50vh] gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            <p className="text-sm font-bold text-slate-500">جاري تجميع بيانات التقارير والإحصائيات...</p>
         </div>
     );
     if (!currentUser || currentUser.role !== 'Admin') return null;
@@ -366,6 +433,13 @@ export default function ReportsPage() {
                     </div>
                 )}
             </div>
+
+            {/* Export loading overlay */}
+            <ExportLoadingModal
+                isOpen={isExporting}
+                title="جاري تصدير التقرير الشامل إلى Excel..."
+                status="يرجى الانتظار، جاري تجميع وتنسيق البيانات وحفظ الملف..."
+            />
         </div>
     );
 }

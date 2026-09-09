@@ -1,28 +1,40 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useStore, Student, Department, StudyType, normalizeArabic } from '../lib/store';
+import { useStore, Student, Department, StudyType, normalizeArabic, buildArabicRegexPattern } from '../lib/store';
+import { supabase } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium, UserCheck, Calendar } from 'lucide-react';
+import { Search, Download, Trash2, Edit2, Check, X, UserPlus, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium, UserCheck, Calendar, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../components/Pagination';
 import Dropdown from '../components/Dropdown';
 import ScrollToTop from '../components/ScrollToTop';
+import ExportLoadingModal from '../components/ExportLoadingModal';
+import AdminPasswordModal from '../components/AdminPasswordModal';
 
 type SortField = 'name' | 'stage' | 'department' | 'studyType';
 type SortDirection = 'asc' | 'desc';
 
+const formatStage = (stage: string | undefined): string => {
+    if (!stage) return '-';
+    const clean = stage.trim();
+    if (clean.startsWith('المرحلة')) return clean;
+    if (clean.includes('Stage')) return clean.replace('Stage', 'المرحلة');
+    return `المرحلة ${clean}`;
+};
+
 export default function MainPage() {
     const router = useRouter();
     const {
-        currentUser, students,
+        currentUser, students, totalStudentsCount, stats,
         l1Enabled, l2Enabled, l3Enabled, l4Enabled,
-        toggleAssignment, updateStudent, addStudent, clearAssignmentsByList,
-        showAlert, isInitialized, isHydrated, departments
+        toggleAssignment, updateStudent, addStudent, clearAssignmentsByList, clearAllAssignments,
+        fetchStudentsPage, showAlert, isInitialized, isHydrated, departments, stages
     } = useStore();
     const [mounted, setMounted] = useState(false);
 
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
     const [stageFilter, setStageFilter] = useState<string>('All');
     const [studyTypeFilter, setStudyTypeFilter] = useState<StudyType | 'All'>('All');
@@ -40,12 +52,29 @@ export default function MainPage() {
     };
 
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [editStage, setEditStage] = useState('');
+    const [editStage, setEditStage] = useState('1');
     const [editDept, setEditDept] = useState<Department>('Art');
     const [savedEdits, setSavedEdits] = useState<Record<string, { stage: string; department: Department }>>({});
 
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState<number>(10);
+    const [isPageLoading, setIsPageLoading] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+
+    // Password modal state for dangerous assignment removal
+    const [passwordModalConfig, setPasswordModalConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        description: string;
+        confirmButtonText: string;
+        onConfirm: () => Promise<void> | void;
+    }>({
+        isOpen: false,
+        title: '',
+        description: '',
+        confirmButtonText: '',
+        onConfirm: () => {}
+    });
 
     // FAB visibility on scroll
     const [fabVisible, setFabVisible] = useState(true);
@@ -102,76 +131,44 @@ export default function MainPage() {
         }
     }, [isAddModalOpen]);
 
-    const filteredStudents = useMemo(() => {
-        const cleanedSearch = normalizeArabic(searchTerm);
-        const baseList = students.filter((s: Student) => {
-            const matchName = !cleanedSearch || normalizeArabic(s.name || '').includes(cleanedSearch);
-            const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
-            const matchStage = stageFilter === 'All' || s.stage === stageFilter;
-            const matchStudyType = studyTypeFilter === 'All' || s.studyType === studyTypeFilter;
-            return matchName && matchDept && matchStage && matchStudyType;
-        });
+    // Debounce search term by 300ms
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
 
-        if (!sortField) {
-            return baseList.slice().reverse();
-        }
-
-        return baseList.slice().sort((a, b) => {
-            let comparison = 0;
-            switch (sortField) {
-                case 'name':
-                    comparison = (a.name || '').localeCompare(b.name || '', 'ar', { sensitivity: 'base' });
-                    break;
-                case 'stage':
-                    comparison = (a.stage || '').localeCompare(b.stage || '', 'ar', { numeric: true });
-                    break;
-                case 'department':
-                    comparison = (a.department || '').localeCompare(b.department || '', 'ar');
-                    break;
-                case 'studyType':
-                    comparison = (a.studyType || '').localeCompare(b.studyType || '', 'ar');
-                    break;
-            }
-            return sortDirection === 'asc' ? comparison : -comparison;
-        });
-    }, [students, searchTerm, deptFilter, stageFilter, studyTypeFilter, sortField, sortDirection]);
-
+    // Reset page to 1 whenever search term or filters change
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, deptFilter, stageFilter, studyTypeFilter]);
+    }, [debouncedSearch, deptFilter, stageFilter, studyTypeFilter]);
 
-    const paginatedStudents = useMemo(() => {
-        const startIndex = (currentPage - 1) * pageSize;
-        return filteredStudents.slice(startIndex, startIndex + pageSize);
-    }, [filteredStudents, currentPage, pageSize]);
+    // Fetch page from Supabase on-demand
+    useEffect(() => {
+        if (!isInitialized || !currentUser || currentUser.role === 'Viewer') return;
 
-    const stats = useMemo(() => {
-        let totalAssigned = 0;
-        let assignedToday = 0;
-        if (!currentUser) return { totalAssigned: 0, assignedToday: 0 };
-        const isAdminStore = currentUser.role === 'Admin';
-        const todayStr = new Date().toDateString();
-
-        students.forEach((s) => {
-            const assignmentValues = Object.values(s.assignments);
-            if (assignmentValues.length === 0) return;
-
-            const relevantAssignments = isAdminStore
-                ? assignmentValues
-                : assignmentValues.filter(a => a?.assignedByUserId === currentUser.id);
-
-            if (relevantAssignments.length > 0) {
-                totalAssigned++;
-                const hasAssignedToday = relevantAssignments.some(a => {
-                    if (!a) return false;
-                    return new Date(a.date).toDateString() === todayStr;
-                });
-                if (hasAssignedToday) assignedToday++;
+        let isCancelled = false;
+        const load = async () => {
+            setIsPageLoading(true);
+            await fetchStudentsPage({
+                page: currentPage,
+                pageSize,
+                searchTerm: debouncedSearch,
+                deptFilter,
+                stageFilter,
+                studyTypeFilter,
+                sortField,
+                sortDirection
+            });
+            if (!isCancelled) {
+                setIsPageLoading(false);
             }
-        });
+        };
 
-        return { totalAssigned, assignedToday };
-    }, [students, currentUser]);
+        load();
+        return () => { isCancelled = true; };
+    }, [currentPage, pageSize, debouncedSearch, deptFilter, stageFilter, studyTypeFilter, sortField, sortDirection, isInitialized, currentUser, fetchStudentsPage]);
 
     if (!mounted || !isInitialized || !isHydrated) return (
         <div className="flex items-center justify-center h-[50vh]">
@@ -184,25 +181,60 @@ export default function MainPage() {
     const canAssign = currentUser.role === 'Admin' || currentUser.role === 'Operator';
     const isAdmin = currentUser.role === 'Admin';
 
-    const exportStudentsToExcel = () => {
-        const unassignedStudents = filteredStudents.filter(s => !s.assignments || Object.keys(s.assignments).length === 0);
-        if (unassignedStudents.length === 0) {
-            showAlert('فشل التصدير', 'لا يوجد طلاب غير مباشرين يطابقون معايير التصفية الحالية للتصدير.', 'error');
-            return;
+    const exportStudentsToExcel = async () => {
+        setIsExporting(true);
+        try {
+            // Fetch all assigned student IDs
+            const { data: assignData, error: aErr } = await supabase.from('assignments').select('student_id');
+            if (aErr) throw aErr;
+            const assignedIds = new Set((assignData || []).map((a: any) => a.student_id));
+
+            // Fetch students matching current department, stage, study mode filters
+            let query = supabase.from('students').select('*');
+            if (deptFilter !== 'All') query = query.eq('department', deptFilter);
+            if (stageFilter !== 'All') query = query.eq('stage', stageFilter);
+            if (studyTypeFilter !== 'All') query = query.eq('study_type', studyTypeFilter);
+            if (debouncedSearch.trim()) {
+                const pattern = buildArabicRegexPattern(debouncedSearch);
+                query = query.filter('name', 'imatch', pattern);
+            }
+
+            let allFilteredStudents: any[] = [];
+            let from = 0;
+            const limit = 1000;
+            while (true) {
+                const { data: sBatch, error: sErr } = await query.range(from, from + limit - 1);
+                if (sErr || !sBatch || sBatch.length === 0) break;
+                allFilteredStudents.push(...sBatch);
+                if (sBatch.length < limit) break;
+                from += limit;
+            }
+
+            const unassigned = allFilteredStudents.filter(s => !assignedIds.has(s.id));
+            if (unassigned.length === 0) {
+                showAlert('فشل التصدير', 'لا يوجد طلاب غير مباشرين يطابقون معايير التصفية الحالية للتصدير.', 'error');
+                return;
+            }
+
+            const data = unassigned.map(s => {
+                return {
+                    'الاسم': s.name,
+                    'المرحلة الدراسية': formatStage(s.stage),
+                    'القسم': s.department,
+                    'نوع الدراسة': s.study_type,
+                    'حالة المباشرة': 'غير مباشر'
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "الطلاب غير المباشرين");
+            XLSX.writeFile(workbook, "unassigned_students.xlsx");
+        } catch (err: any) {
+            showAlert('خطأ', 'فشل تصدير الطلاب غير المباشرين: ' + (err.message || ''), 'error');
+        } finally {
+            setIsExporting(false);
         }
-        const data = unassignedStudents.map(s => {
-            return {
-                'الاسم': s.name,
-                'المرحلة الدراسية': s.stage.startsWith('المرحلة') ? s.stage : s.stage.includes('Stage') ? s.stage.replace('Stage', 'المرحلة') : `المرحلة ${s.stage}`,
-                'القسم': s.department,
-                'نوع الدراسة': s.studyType,
-                'حالة المباشرة': 'غير مباشر'
-            };
-        });
-        const worksheet = XLSX.utils.json_to_sheet(data);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "الطلاب غير المباشرين");
-        XLSX.writeFile(workbook, "unassigned_students.xlsx");
     };
 
     const handleSaveEdit = (id: string) => {
@@ -214,7 +246,8 @@ export default function MainPage() {
     };
 
     const startEdit = (student: any) => {
-        setEditStage(student.stage);
+        const rawStage = student.stage ? String(student.stage).replace(/[^0-9]/g, '') : '1';
+        setEditStage(['1', '2', '3', '4', '5', '6'].includes(rawStage) ? rawStage : '1');
         setEditDept(student.department);
         setEditingId(student.id);
     };
@@ -328,8 +361,8 @@ export default function MainPage() {
                                     onChange={(val) => setStageFilter(val)}
                                     options={[
                                         { label: 'جميع المراحل', value: 'All' },
-                                        ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).sort().map(stage => ({
-                                            label: stage.startsWith('المرحلة') ? stage : stage.includes('Stage') ? stage.replace('Stage', 'المرحلة') : `المرحلة ${stage}`,
+                                        ...['1', '2', '3', '4', '5', '6'].map((stage: string) => ({
+                                            label: `المرحلة ${stage}`,
                                             value: stage
                                         }))
                                     ]}
@@ -352,10 +385,10 @@ export default function MainPage() {
                                 onClick={exportStudentsToExcel}
                                 className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all duration-300 transform active:scale-95 text-sm font-bold shadow-[0_5px_15px_-5px_rgba(79,70,229,0.5)] hover:shadow-[0_10px_20px_-5px_rgba(79,70,229,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                                 title="تصدير الطلاب غير المباشرين المفلترين إلى Excel"
-                                disabled={filteredStudents.length === 0}
+                                disabled={totalStudentsCount === 0 || isExporting}
                             >
-                                <Download className="w-4 h-4" />
-                                تصدير
+                                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                {isExporting ? 'جاري التصدير...' : 'تصدير'}
                             </button>
                         </div>
                     </div>
@@ -458,18 +491,21 @@ export default function MainPage() {
                                         {isAdmin && (
                                             <div className="flex gap-1.5 justify-end w-full">
                                                 {(['L1', 'L2', 'L3', 'L4'] as const).map(list => {
-                                                    const hasAssignments = students.some(s => !!s.assignments[list]);
+                                                    const hasAssignments = (stats?.byList?.[list] || 0) > 0;
                                                     return (
                                                         <button
                                                             key={`clear-${list}`}
                                                             disabled={!hasAssignments}
                                                             onClick={() => {
-                                                                showAlert(
-                                                                    `مسح كل ${list}؟`,
-                                                                    `سيؤدي هذا إلى مسح جميع مباشرات الطلاب في Course ${list}. لا يمكن التراجع عن هذا الإجراء.`,
-                                                                    'confirm',
-                                                                    () => clearAssignmentsByList(list)
-                                                                );
+                                                                setPasswordModalConfig({
+                                                                    isOpen: true,
+                                                                    title: `مسح كل مباشرات ${list} (Course ${list.replace('L', '')})`,
+                                                                    description: `سيؤدي هذا الإجراء إلى مسح جميع مباشرات الطلاب في Course ${list.replace('L', '')}. يرجى إدخال كلمة مرور المشرف للمتابعة.`,
+                                                                    confirmButtonText: `مسح Course ${list.replace('L', '')}`,
+                                                                    onConfirm: async () => {
+                                                                        await clearAssignmentsByList(list);
+                                                                    }
+                                                                });
                                                             }}
                                                             title={`مسح كل طلاب Course ${list.replace('L', '')}`}
                                                             className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center font-extrabold transition-all active:scale-95 border shadow-2xs
@@ -494,14 +530,23 @@ export default function MainPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-sm">
-                            {paginatedStudents.length === 0 ? (
+                            {isPageLoading ? (
+                                <tr>
+                                    <td colSpan={canEdit ? 6 : 5} className="p-12 text-center text-muted-foreground bg-white">
+                                        <div className="flex items-center justify-center gap-2 text-indigo-600 font-bold">
+                                            <Loader2 className="w-6 h-6 animate-spin" />
+                                            <span>جاري تحميل البيانات...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : students.length === 0 ? (
                                 <tr>
                                     <td colSpan={canEdit ? 6 : 5} className="p-12 text-center text-muted-foreground bg-white italic">
                                         لا يوجد طلاب يطابقون خيارات التصفية الحالية.
                                     </td>
                                 </tr>
                             ) : (
-                                paginatedStudents.map((student: Student) => (
+                                students.map((student: Student) => (
                                     <tr key={student.id} className={`hover:bg-blue-50/50 transition-all duration-200 group/row bg-white relative ${editingId === student.id ? 'bg-blue-50/30' : ''}`}>
                                         <td className="p-4 relative">
                                             <div className={`absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 origin-top duration-300 transition-transform ${editingId === student.id ? 'scale-y-100' : 'scale-y-0 group-hover/row:scale-y-100'}`}></div>
@@ -512,12 +557,15 @@ export default function MainPage() {
                                         {editingId === student.id ? (
                                             <>
                                                 <td className="p-4">
-                                                    <input
-                                                        type="text"
+                                                    <select
                                                         value={editStage}
                                                         onChange={(e) => setEditStage(e.target.value)}
                                                         className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-bold text-sm text-slate-800 bg-white shadow-sm"
-                                                    />
+                                                    >
+                                                        {['1', '2', '3', '4', '5', '6'].map(num => (
+                                                            <option key={num} value={num}>المرحلة {num}</option>
+                                                        ))}
+                                                    </select>
                                                 </td>
                                                 <td className="p-4">
                                                     <select
@@ -533,7 +581,7 @@ export default function MainPage() {
                                             </>
                                         ) : (
                                             <>
-                                                <td className="p-4 text-center text-muted-foreground font-medium">{(savedEdits[student.id]?.stage ?? student.stage).replace('Stage', 'المرحلة')}</td>
+                                                <td className="p-4 text-center text-muted-foreground font-medium">{formatStage(savedEdits[student.id]?.stage ?? student.stage)}</td>
                                                 <td className="p-4 text-center text-muted-foreground font-medium">{savedEdits[student.id]?.department ?? student.department}</td>
                                             </>
                                         )}
@@ -633,7 +681,7 @@ export default function MainPage() {
                 </div>
                 <Pagination
                     currentPage={currentPage}
-                    totalItems={filteredStudents.length}
+                    totalItems={totalStudentsCount}
                     pageSize={pageSize}
                     onPageChange={setCurrentPage}
                     onPageSizeChange={setPageSize}
@@ -642,7 +690,7 @@ export default function MainPage() {
 
             {/* Scroll to Top Button — only shows when 30+ items and scrolled down */}
             <ScrollToTop
-                itemsCount={paginatedStudents.length}
+                itemsCount={students.length}
                 hasBottomFab={isAdmin}
             />
 
@@ -836,6 +884,26 @@ export default function MainPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Export loading overlay */}
+            <ExportLoadingModal
+                isOpen={isExporting}
+                title="جاري تصدير الطلاب غير المباشرين إلى Excel..."
+                status="يرجى الانتظار، جاري تجميع وتنسيق بيانات الطلاب غير المباشرين وحفظ الملف..."
+            />
+
+            {/* Admin Password Modal for Assignment Clearing */}
+            {currentUser && (
+                <AdminPasswordModal
+                    isOpen={passwordModalConfig.isOpen}
+                    title={passwordModalConfig.title}
+                    description={passwordModalConfig.description}
+                    confirmButtonText={passwordModalConfig.confirmButtonText}
+                    currentUserEmail={currentUser.email}
+                    onClose={() => setPasswordModalConfig(prev => ({ ...prev, isOpen: false }))}
+                    onConfirm={passwordModalConfig.onConfirm}
+                />
+            )}
 
             <style jsx global>{`
                 @keyframes modalIn {

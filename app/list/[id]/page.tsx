@@ -3,14 +3,23 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useStore, Student, Department, StudyType, normalizeArabic } from '../../../lib/store';
 import { useRouter } from 'next/navigation';
-import { Trash2, Download, Search, Filter, X, Lock, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium, Calendar, UserCheck, Hash } from 'lucide-react';
+import { Trash2, Download, Search, Filter, X, Lock, ArrowUpDown, ArrowUp, ArrowDown, User, GraduationCap, Building2, SunMedium, Calendar, UserCheck, Hash, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Pagination from '../../../components/Pagination';
 import Dropdown from '../../../components/Dropdown';
 import ScrollToTop from '../../../components/ScrollToTop';
+import ExportLoadingModal from '../../../components/ExportLoadingModal';
 
 type SortField = 'index' | 'name' | 'stage' | 'department' | 'studyType' | 'date' | 'assignedBy';
 type SortDirection = 'asc' | 'desc';
+
+const formatStage = (stage: string | undefined): string => {
+    if (!stage) return '-';
+    const clean = stage.trim();
+    if (clean.startsWith('المرحلة')) return clean;
+    if (clean.includes('Stage')) return clean.replace('Stage', 'المرحلة');
+    return `المرحلة ${clean}`;
+};
 
 export default function ListPage({ params }: { params: { id: string } }) {
     const router = useRouter();
@@ -19,7 +28,8 @@ export default function ListPage({ params }: { params: { id: string } }) {
 
     const {
         currentUser,
-        students,
+        fetchCourseStudentsPage,
+        fetchCourseAllStudentsForExport,
         departments,
         l1Enabled,
         l2Enabled,
@@ -28,16 +38,25 @@ export default function ListPage({ params }: { params: { id: string } }) {
         removeAssignment,
         showAlert,
         isInitialized,
-        isHydrated
+        isHydrated,
+        stages,
+        courseDataVersion
     } = useStore();
+
     const [mounted, setMounted] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [deptFilter, setDeptFilter] = useState<Department | 'All'>('All');
     const [stageFilter, setStageFilter] = useState<string>('All');
     const [studyTypeFilter, setStudyTypeFilter] = useState<StudyType | 'All'>('All');
 
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState<number>(10);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
+
+    const [studentsList, setStudentsList] = useState<Student[]>([]);
+    const [totalCount, setTotalCount] = useState<number>(0);
 
     const [sortField, setSortField] = useState<SortField>('date');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -47,7 +66,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
             setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
         } else {
             setSortField(field);
-            setSortDirection('asc');
+            setSortDirection(field === 'date' ? 'desc' : 'asc');
         }
     };
 
@@ -72,92 +91,80 @@ export default function ListPage({ params }: { params: { id: string } }) {
         if (!currentUser) router.push('/login');
     }, [currentUser, router]);
 
-    const contextStudents = useMemo(() => {
-        const filtered = students.filter((s: Student) => {
-            if (!s.assignments[listName]) return false;
+    // Debounce search term
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
 
-            // Viewer restriction
-            if (currentUser?.role === 'Viewer') {
-                if (!currentUser.allowedDepartments?.includes(s.department)) return false;
-            }
-
-            const matchDept = deptFilter === 'All' || s.department?.trim().toLowerCase() === deptFilter?.trim().toLowerCase();
-            const matchStage = stageFilter === 'All' || s.stage === stageFilter;
-            const matchStudyType = studyTypeFilter === 'All' || s.studyType === studyTypeFilter;
-
-            return matchDept && matchStage && matchStudyType;
-        });
-
-        // Sort by assignment date (oldest first: chronological insertion order)
-        return filtered.sort((a, b) => {
-            const dateA = new Date(a.assignments[listName]!.date).getTime();
-            const dateB = new Date(b.assignments[listName]!.date).getTime();
-            return dateA - dateB;
-        });
-    }, [students, listName, currentUser, deptFilter, stageFilter, studyTypeFilter]);
-
-    const filteredStudents = useMemo(() => {
-        const cleanedSearch = normalizeArabic(searchTerm);
-        const searched = contextStudents.filter((s: Student) => {
-            if (!cleanedSearch) return true;
-            return normalizeArabic(s.name || '').includes(cleanedSearch);
-        });
-
-        return [...searched].sort((a, b) => {
-            let comparison = 0;
-            switch (sortField) {
-                case 'name':
-                    comparison = (a.name || '').localeCompare(b.name || '', 'ar', { sensitivity: 'base' });
-                    break;
-                case 'stage':
-                    comparison = (a.stage || '').localeCompare(b.stage || '', 'ar', { numeric: true });
-                    break;
-                case 'department':
-                    comparison = (a.department || '').localeCompare(b.department || '', 'ar');
-                    break;
-                case 'studyType':
-                    comparison = (a.studyType || '').localeCompare(b.studyType || '', 'ar');
-                    break;
-                case 'date': {
-                    const dateA = a.assignments[listName]?.date ? new Date(a.assignments[listName]!.date).getTime() : 0;
-                    const dateB = b.assignments[listName]?.date ? new Date(b.assignments[listName]!.date).getTime() : 0;
-                    comparison = dateA - dateB;
-                    break;
-                }
-                case 'assignedBy': {
-                    const byA = a.assignments[listName]?.assignedByUserName || '';
-                    const byB = b.assignments[listName]?.assignedByUserName || '';
-                    comparison = byA.localeCompare(byB, 'ar');
-                    break;
-                }
-                case 'index': {
-                    const origA = contextStudents.findIndex(s => s.id === a.id);
-                    const origB = contextStudents.findIndex(s => s.id === b.id);
-                    comparison = origA - origB;
-                    break;
-                }
-                default:
-                    comparison = 0;
-            }
-            return sortDirection === 'asc' ? comparison : -comparison;
-        });
-    }, [contextStudents, searchTerm, listName, sortField, sortDirection]);
-
-    // Reset pagination when filters change
+    // Reset page to 1 when filters change
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, deptFilter, stageFilter, studyTypeFilter]);
+    }, [debouncedSearch, deptFilter, stageFilter, studyTypeFilter]);
 
-    const paginatedStudents = useMemo(() => {
-        const startIndex = (currentPage - 1) * pageSize;
-        return filteredStudents.slice(startIndex, startIndex + pageSize);
-    }, [filteredStudents, currentPage, pageSize]);
+    // Fetch on-demand paginated course data
+    useEffect(() => {
+        if (!isInitialized || !currentUser) return;
 
-    if (!mounted || !isInitialized || !isHydrated) return (
-        <div className="flex items-center justify-center h-[50vh]">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-    );
+        let isCancelled = false;
+        const load = async () => {
+            setIsLoading(true);
+            try {
+                const res = await fetchCourseStudentsPage({
+                    courseId: listName,
+                    page: currentPage,
+                    pageSize,
+                    searchTerm: debouncedSearch,
+                    deptFilter,
+                    stageFilter,
+                    studyTypeFilter,
+                    sortField: sortField === 'index' ? 'date' : sortField,
+                    sortDirection
+                });
+
+                if (!isCancelled) {
+                    setStudentsList(res.students);
+                    setTotalCount(res.totalCount);
+                }
+            } catch (err) {
+                console.error('Error loading course students:', err);
+            } finally {
+                if (!isCancelled) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        load();
+        return () => {
+            isCancelled = true;
+        };
+    }, [
+        listName,
+        currentPage,
+        pageSize,
+        debouncedSearch,
+        deptFilter,
+        stageFilter,
+        studyTypeFilter,
+        sortField,
+        sortDirection,
+        isInitialized,
+        currentUser,
+        fetchCourseStudentsPage,
+        courseDataVersion
+    ]);
+
+    if (!mounted || !isInitialized || !isHydrated) {
+        return (
+            <div className="flex items-center justify-center h-[50vh]">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
     if (!currentUser) return null;
 
     // Block non-admins from viewing disabled courses
@@ -197,40 +204,75 @@ export default function ListPage({ params }: { params: { id: string } }) {
         );
     }
 
-    const exportListToExcel = () => {
-        if (filteredStudents.length === 0) {
-            showAlert('Export Failed', 'No data available to export', 'error');
-            return;
-        }
+    const exportListToExcel = async () => {
+        setIsExporting(true);
+        try {
+            const allMatchingStudents = await fetchCourseAllStudentsForExport({
+                courseId: listName,
+                searchTerm: debouncedSearch,
+                deptFilter,
+                stageFilter,
+                studyTypeFilter
+            });
 
-        const data = filteredStudents.map(s => {
-            const meta = s.assignments[listName];
-            const row: Record<string, string> = {
-                'الاسم': s.name,
-                'المرحلة الدراسية': s.stage.startsWith('المرحلة') ? s.stage : s.stage.includes('Stage') ? s.stage.replace('Stage', 'المرحلة') : `المرحلة ${s.stage}`,
-                'القسم': s.department,
-                'نوع الدراسة': s.studyType,
-                'تاريخ المباشرة': meta ? new Date(meta.date).toLocaleDateString() : '-',
-            };
-            if (currentUser.role !== 'Viewer') {
-                row['مباشر بواسطة'] = meta ? meta.assignedByUserName : '-';
+            if (!allMatchingStudents || allMatchingStudents.length === 0) {
+                showAlert('فشل التصدير', 'لا توجد بيانات متاحة للتصدير حسب معايير التصفية المحددة.', 'error');
+                return;
             }
-            return row;
-        });
-        const worksheet = XLSX.utils.json_to_sheet(data);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, `Course_${listName}`);
-        XLSX.writeFile(workbook, `course_${listName}_students.xlsx`);
+
+            const data = allMatchingStudents.map((s, index) => {
+                const meta = s.assignments[listName];
+                const row: Record<string, string | number> = {
+                    'ت': index + 1,
+                    'الاسم': s.name,
+                    'المرحلة الدراسية': formatStage(s.stage),
+                    'القسم': s.department,
+                    'نوع الدراسة': s.studyType,
+                    'تاريخ المباشرة': meta ? new Date(meta.date).toLocaleDateString('ar-IQ') : '-',
+                };
+                if (currentUser.role !== 'Viewer') {
+                    row['مباشر بواسطة'] = meta ? meta.assignedByUserName : '-';
+                }
+                return row;
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, `Course_${listName}`);
+            XLSX.writeFile(workbook, `course_${listName}_students.xlsx`);
+        } catch (err: any) {
+            showAlert('خطأ في التصدير', err.message || 'فشل تجهيز ملف التصدير', 'error');
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const canRemove = currentUser.role === 'Admin';
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
+            {/* Full-Screen Blurred Export Loading Overlay */}
+            <ExportLoadingModal
+                isOpen={isExporting}
+                title={`جاري تصدير قائمة Course ${listName.replace('L', '')} إلى Excel...`}
+                status="يرجى الانتظار، جاري تجميع السجلات وتجهيز ملف التحميل..."
+            />
+
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight uppercase">Course {listName.replace('L', '')}</h1>
+                    <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 tracking-tight uppercase">
+                        Course {listName.replace('L', '')}
+                    </h1>
                 </div>
+
+                {currentUser.role !== 'Viewer' && (
+                    <div className="flex items-center gap-3">
+                        <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-xs text-sm font-bold text-slate-700">
+                            <span>إجمالي الطلاب المباشرين: </span>
+                            <span className="text-indigo-600 font-extrabold mr-1">{totalCount}</span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Sticky Search & Filter Bar with Background Shield */}
@@ -286,9 +328,9 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                     onChange={(val) => setStageFilter(val)}
                                     options={[
                                         { label: 'جميع المراحل', value: 'All' },
-                                        ...Array.from(new Set(students.map(s => s.stage))).filter(Boolean).sort().map(stage => ({
-                                            label: stage.startsWith('المرحلة') ? stage : stage.includes('Stage') ? stage.replace('Stage', 'المرحلة') : `المرحلة ${stage}`,
-                                            value: stage
+                                        ...['1', '2', '3', '4', '5', '6'].map((n: string) => ({
+                                            label: `المرحلة ${n}`,
+                                            value: n
                                         }))
                                     ]}
                                 />
@@ -310,10 +352,10 @@ export default function ListPage({ params }: { params: { id: string } }) {
                                 onClick={exportListToExcel}
                                 className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all duration-300 transform active:scale-95 text-sm font-bold shadow-[0_5px_15px_-5px_rgba(79,70,229,0.5)] hover:shadow-[0_10px_20px_-5px_rgba(79,70,229,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                                 title={`تصدير الطلاب المفلترين في Course ${listName} إلى Excel`}
-                                disabled={filteredStudents.length === 0}
+                                disabled={totalCount === 0 || isExporting}
                             >
-                                <Download className="w-4 h-4" />
-                                تصدير
+                                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                <span>{isExporting ? 'جاري التصدير...' : 'تصدير'}</span>
                             </button>
                         </div>
                     </div>
@@ -468,63 +510,74 @@ export default function ListPage({ params }: { params: { id: string } }) {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-sm">
-                            {paginatedStudents.length === 0 ? (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={canRemove ? 8 : currentUser.role === 'Viewer' ? 6 : 7} className="p-12 text-center text-muted-foreground bg-white">
+                                        <div className="flex items-center justify-center gap-2 text-indigo-600 font-bold">
+                                            <Loader2 className="w-6 h-6 animate-spin" />
+                                            <span>جاري تحميل قائمة الطلاب...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : studentsList.length === 0 ? (
                                 <tr>
                                     <td colSpan={canRemove ? 8 : currentUser.role === 'Viewer' ? 6 : 7} className="p-8 text-center text-muted-foreground">
                                         لا يوجد طلاب يطابقون معاييرك في Course {listName.replace('L', '')}.
                                     </td>
                                 </tr>
                             ) : (
-                                paginatedStudents.map((student: Student) => {
-                                    const renderedIndex = contextStudents.findIndex(s => s.id === student.id) + 1;
+                                studentsList.map((student: Student, index: number) => {
+                                    const renderedIndex = (currentPage - 1) * pageSize + index + 1;
                                     return (
-                                    <tr key={student.id} className="hover:bg-blue-50/50 transition-all duration-200 group/row bg-white relative">
-                                        <td className="p-4 text-center font-bold text-slate-500">{renderedIndex}</td>
-                                        <td className="p-4 relative">
-                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 origin-top duration-300 transition-transform scale-y-0 group-hover/row:scale-y-100"></div>
-                                            <div className="font-bold text-slate-800 group-hover/row:text-indigo-600 transition-colors duration-200">
-                                                {student.name}
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-center text-muted-foreground font-medium">{student.stage.replace('Stage', 'المرحلة')}</td>
-                                        <td className="p-4 text-center text-muted-foreground font-medium">{student.department}</td>
-                                        <td className="p-4 text-center">
-                                            <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold shadow-xs
-                                            ${student.studyType === 'صباحي' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'}`}>
-                                                {student.studyType}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-center text-muted-foreground">
-                                            {student.assignments[listName]
-                                                ? new Date(student.assignments[listName]!.date).toLocaleDateString()
-                                                : '-'}
-                                        </td>
-                                        {currentUser.role !== 'Viewer' && (
+                                        <tr key={student.id} className="hover:bg-blue-50/50 transition-all duration-200 group/row bg-white relative">
+                                            <td className="p-4 text-center font-bold text-slate-500">{renderedIndex}</td>
+                                            <td className="p-4 relative">
+                                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 origin-top duration-300 transition-transform scale-y-0 group-hover/row:scale-y-100"></div>
+                                                <div className="font-bold text-slate-800 group-hover/row:text-indigo-600 transition-colors duration-200">
+                                                    {student.name}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center text-muted-foreground font-medium">
+                                                {formatStage(student.stage)}
+                                            </td>
+                                            <td className="p-4 text-center text-muted-foreground font-medium">{student.department}</td>
+                                            <td className="p-4 text-center">
+                                                <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold shadow-xs
+                                                ${student.studyType === 'صباحي' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'}`}>
+                                                    {student.studyType}
+                                                </span>
+                                            </td>
                                             <td className="p-4 text-center text-muted-foreground">
                                                 {student.assignments[listName]
-                                                    ? student.assignments[listName]!.assignedByUserName
+                                                    ? new Date(student.assignments[listName]!.date).toLocaleDateString('ar-IQ')
                                                     : '-'}
                                             </td>
-                                        )}
-                                        {canRemove && (
-                                            <td className="p-4">
-                                                <button
-                                                    onClick={() => {
-                                                        showAlert(
-                                                            'إزالة المباشرة؟',
-                                                            `هل أنت متأكد من رغبتك في إزالة ${student.name} من Course ${listName.replace('L', '')}؟`,
-                                                            'confirm',
-                                                            () => removeAssignment(student.id, listName, currentUser)
-                                                        );
-                                                    }}
-                                                    className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xs transition-all border bg-red-600 text-white border-red-600 transform scale-105 shadow-[0_4px_10px_-2px_rgba(220,38,38,0.5)] active:scale-95"
-                                                    title="إزالة الطالب من Course"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </td>
-                                        )}
-                                    </tr>
+                                            {currentUser.role !== 'Viewer' && (
+                                                <td className="p-4 text-center text-muted-foreground">
+                                                    {student.assignments[listName]
+                                                        ? student.assignments[listName]!.assignedByUserName
+                                                        : '-'}
+                                                </td>
+                                            )}
+                                            {canRemove && (
+                                                <td className="p-4 text-center">
+                                                    <button
+                                                        onClick={() => {
+                                                            showAlert(
+                                                                'إزالة المباشرة؟',
+                                                                `هل أنت متأكد من رغبتك في إزالة ${student.name} من Course ${listName.replace('L', '')}؟`,
+                                                                'confirm',
+                                                                () => removeAssignment(student.id, listName, currentUser)
+                                                            );
+                                                        }}
+                                                        className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xs transition-all border bg-red-600 text-white border-red-600 transform scale-105 shadow-[0_4px_10px_-2px_rgba(220,38,38,0.5)] active:scale-95 mx-auto"
+                                                        title="إزالة الطالب من Course"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </td>
+                                            )}
+                                        </tr>
                                     );
                                 })
                             )}
@@ -533,7 +586,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
                 </div>
                 <Pagination
                     currentPage={currentPage}
-                    totalItems={filteredStudents.length}
+                    totalItems={totalCount}
                     pageSize={pageSize}
                     onPageChange={setCurrentPage}
                     onPageSizeChange={setPageSize}
@@ -541,7 +594,7 @@ export default function ListPage({ params }: { params: { id: string } }) {
             </div>
 
             {/* Scroll to Top Button */}
-            <ScrollToTop itemsCount={paginatedStudents.length} />
+            <ScrollToTop itemsCount={studentsList.length} />
         </div>
     );
 }

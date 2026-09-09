@@ -168,6 +168,7 @@ function NavItem({
     return (
         <Link
             href={disabled ? '#' : href}
+            prefetch={false}
             onClick={onClick}
             title={!expanded ? label : undefined}
             className={`flex items-center gap-3 py-3 rounded-xl text-sm font-bold transition-all duration-200 overflow-hidden ${active
