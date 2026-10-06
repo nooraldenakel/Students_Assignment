@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useStore } from '../../lib/store';
+import { useStore, fetchAllRecords } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Settings as SettingsIcon, ShieldAlert, Users, Plus, Trash2, X, AlertCircle, ChevronDown, ChevronUp, Database, Download, Upload, AlertTriangle, KeyRound } from 'lucide-react';
+import { Settings as SettingsIcon, ShieldAlert, Users, Plus, Trash2, X, AlertCircle, ChevronDown, ChevronUp, Database, Download, Upload, AlertTriangle, KeyRound, RotateCcw, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Role, Department, normalizeArabic } from '../../lib/store';
 
@@ -41,12 +41,15 @@ export default function SettingsPage() {
     const [adminPassword, setAdminPassword] = useState('');
     const [passwordAction, setPasswordAction] = useState<(() => Promise<void>) | null>(null);
     const [importFile, setImportFile] = useState<File | null>(null);
+    const [importAssignmentsFile, setImportAssignmentsFile] = useState<File | null>(null);
+    const [targetCourse, setTargetCourse] = useState<'L1' | 'L2' | 'L3' | 'L4'>('L1');
     const [isDatabaseLoading, setIsDatabaseLoading] = useState(false);
     const [modalError, setModalError] = useState('');
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const assignmentsFileInputRef = React.useRef<HTMLInputElement>(null);
     const [isDatabaseOpen, setIsDatabaseOpen] = useState(false);
     const [hasData, setHasData] = useState<boolean | null>(null);
-    const [activeAction, setActiveAction] = useState<'export' | 'import' | 'delete' | null>(null);
+    const [activeAction, setActiveAction] = useState<'export' | 'import' | 'delete' | 'restore_assignments' | null>(null);
 
     const checkDataStatus = async () => {
         try {
@@ -261,6 +264,161 @@ export default function SettingsPage() {
                 });
             } catch (error: any) {
                 // errors already handled inside callback
+            }
+        });
+    };
+
+    const parseArabicDate = (str: any): string => {
+        if (!str) return new Date().toISOString();
+        const arabicDigits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+        let standard = String(str).replace(/[٠-٩]/g, d => String(arabicDigits.indexOf(d)));
+        standard = standard.replace(/[\u200E\u200F\u202A-\u202E\s]/g, '');
+        const parts = standard.split(/[\/\-\.]/);
+        if (parts.length === 3) {
+            let [p1, p2, p3] = parts.map(Number);
+            let year = 2026, month = 1, day = 1;
+            if (p1 > 1000) {
+                year = p1; month = p2; day = p3;
+            } else if (p3 > 1000) {
+                year = p3; month = p2; day = p1;
+            } else {
+                year = p3; month = p1; day = p2;
+            }
+            const d = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+            if (!isNaN(d.getTime())) return d.toISOString();
+        }
+        return new Date().toISOString();
+    };
+
+    const handleRestoreAssignments = () => {
+        if (!importAssignmentsFile) {
+            showAlert('تنبيه', 'الرجاء اختيار ملف Excel لاسترجاع المباشرات.', 'error');
+            return;
+        }
+
+        triggerPasswordModal(async () => {
+            setActiveAction('restore_assignments');
+            setIsDatabaseLoading(true);
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            
+                            const sheetName = workbook.SheetNames.find(n => n.includes(targetCourse) || n.toLowerCase().includes('course') || n.includes('مباشر')) || workbook.SheetNames[0];
+                            const sheet = workbook.Sheets[sheetName];
+                            const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+
+                            if (!rows || rows.length === 0) {
+                                throw new Error('الملف فارغ أو لا يحتوي على صفوف بيانات.');
+                            }
+
+                            // 1. Fetch all students from database
+                            const stdRes = await fetchAllRecords('students');
+                            const allStudents: any[] = stdRes.data || [];
+                            if (allStudents.length === 0) {
+                                throw new Error('لا يوجد طلاب مسجلين في قاعدة البيانات للربط معهم.');
+                            }
+
+                            // 2. Fetch existing assignments for target course to avoid duplicates
+                            const asgnRes = await supabase.from('assignments').select('student_id').eq('list_id', targetCourse);
+                            const existingStudentIds = new Set<string>((asgnRes.data || []).map((a: any) => a.student_id));
+
+                            // 3. Build quick lookup maps for students
+                            const studentMapByDept = new Map<string, any>();
+                            const studentMapByName = new Map<string, any>();
+
+                            for (const s of allStudents) {
+                                const normName = normalizeArabic(s.name);
+                                const normDept = normalizeArabic(s.department || '');
+                                studentMapByDept.set(`${normName}___${normDept}`, s);
+                                if (!studentMapByName.has(normName)) {
+                                    studentMapByName.set(normName, s);
+                                }
+                            }
+
+                            // 4. Match and build insert list (skipping duplicates)
+                            const toInsert: any[] = [];
+                            let skippedDuplicates = 0;
+                            let notFoundStudents = 0;
+
+                            for (const row of rows) {
+                                const rawName = row['الاسم'] || row['اسم الطالب'] || row['name'] || row['Name'];
+                                if (!rawName) continue;
+                                const normName = normalizeArabic(String(rawName));
+                                const rawDept = row['القسم'] || row['department'] || '';
+                                const normDept = normalizeArabic(String(rawDept));
+
+                                let matchedStudent = studentMapByDept.get(`${normName}___${normDept}`);
+                                if (!matchedStudent) {
+                                    matchedStudent = studentMapByName.get(normName);
+                                }
+
+                                if (!matchedStudent) {
+                                    notFoundStudents++;
+                                    continue;
+                                }
+
+                                // Skip duplicate assignment
+                                if (existingStudentIds.has(matchedStudent.id)) {
+                                    skippedDuplicates++;
+                                    continue;
+                                }
+
+                                existingStudentIds.add(matchedStudent.id);
+
+                                const assignedDate = parseArabicDate(row['تاريخ المباشرة'] || row['date'] || row['Date']);
+                                const assignedByName = row['مباشر بواسطة'] || row['assigned_by'] || currentUser?.name || 'Admin';
+
+                                toInsert.push({
+                                    student_id: matchedStudent.id,
+                                    list_id: targetCourse,
+                                    assigned_date: assignedDate,
+                                    assigned_by_user_id: currentUser?.id,
+                                    assigned_by_user_name: assignedByName
+                                });
+                            }
+
+                            // 5. Batch insert in chunks of 500
+                            const BATCH_SIZE = 500;
+                            let insertedCount = 0;
+
+                            for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+                                const chunk = toInsert.slice(i, i + BATCH_SIZE);
+                                const { error: insErr } = await supabase.from('assignments').insert(chunk);
+                                if (insErr) {
+                                    throw new Error(`خطأ أثناء إدراج المباشرات: ${insErr.message}`);
+                                }
+                                insertedCount += chunk.length;
+                            }
+
+                            // 6. Refresh state & UI
+                            useStore.getState().refreshStats();
+
+                            showAlert(
+                                'تم استرجاع المباشرات بنجاح',
+                                `تمت إضافة ${insertedCount} مباشرة بنجاح لـ (${targetCourse}).\nتم تخطي ${skippedDuplicates} مباشرة مكررة.\n${notFoundStudents > 0 ? `(لم يتم العثور على ${notFoundStudents} طالب في قائمة الطلاب الحالية)` : ''}`,
+                                'success'
+                            );
+
+                            setImportAssignmentsFile(null);
+                            if (assignmentsFileInputRef.current) assignmentsFileInputRef.current.value = '';
+                            resolve();
+                        } catch (err: any) {
+                            showAlert('خطأ أثناء الاسترجاع', err.message || 'فشلت عملية استرجاع المباشرات.', 'error');
+                            reject(err);
+                        }
+                    };
+                    reader.onerror = (err) => {
+                        showAlert('خطأ عام', 'فشل في قراءة ملف Excel.', 'error');
+                        reject(err);
+                    };
+                    reader.readAsArrayBuffer(importAssignmentsFile);
+                });
+            } catch (error: any) {
+                // Handled
             }
         });
     };
@@ -748,6 +906,66 @@ export default function SettingsPage() {
                                         <>
                                             <Upload className="w-4 h-4 text-white" />
                                             رفع البيانات وإدراجها
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+    
+                            {/* Restore Assignments Block */}
+                            <div className="bg-white p-4 rounded-xl border border-indigo-200 shadow-2xs">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h3 className="font-bold text-indigo-900 text-[14px] flex items-center gap-1.5">
+                                        <RotateCcw className="w-4 h-4 text-indigo-600" />
+                                        استرجاع المباشرات من Excel
+                                    </h3>
+                                    <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
+                                </div>
+                                <p className="text-[12px] text-gray-500 mb-3">
+                                    استرجاع المباشرات المحفوظة في ملف Excel وربطها تلقائياً بالطلاب مع <b>تخطي أي مباشرة مكررة</b>.
+                                </p>
+
+                                <div className="flex gap-2 items-center mb-3">
+                                    <label className="text-[12px] font-bold text-gray-700 whitespace-nowrap">الدورة المستهدفة:</label>
+                                    <select
+                                        value={targetCourse}
+                                        onChange={(e) => setTargetCourse(e.target.value as any)}
+                                        className="flex-1 px-3 py-1.5 text-xs font-bold rounded-lg border border-indigo-200 bg-indigo-50/50 text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                    >
+                                        <option value="L1">Course 1 (L1)</option>
+                                        <option value="L2">Course 2 (L2)</option>
+                                        <option value="L3">Course 3 (L3)</option>
+                                        <option value="L4">Course 4 (L4)</option>
+                                    </select>
+                                </div>
+
+                                <input
+                                    type="file"
+                                    accept=".xlsx, .xls, .csv"
+                                    disabled={isDatabaseLoading}
+                                    ref={assignmentsFileInputRef as any}
+                                    onChange={(e) => setImportAssignmentsFile(e.target.files?.[0] || null)}
+                                    className="block w-full text-[12px] text-gray-500 mb-3
+                                    file:mr-4 file:py-2 file:px-4
+                                    file:rounded-full file:border-0
+                                    file:text-sm file:font-semibold
+                                    file:bg-indigo-50 file:text-indigo-700
+                                    hover:file:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+
+                                <button
+                                    onClick={handleRestoreAssignments}
+                                    disabled={isDatabaseLoading || !importAssignmentsFile}
+                                    className="w-full h-[42px] bg-indigo-600 text-white rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all font-bold text-[13px] disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                >
+                                    {isDatabaseLoading && showPasswordModal === false && activeAction === 'restore_assignments' ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            جاري معالجة واسترجاع المباشرات...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RotateCcw className="w-4 h-4 text-white" />
+                                            استرجاع المباشرات وتخطي المكرر
                                         </>
                                     )}
                                 </button>

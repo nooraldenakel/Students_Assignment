@@ -612,10 +612,32 @@ export const useStore = create<AppState>()(
             },
 
             initRealtime: async () => {
-                const currentUser = get().currentUser;
+                let currentUser = get().currentUser;
                 if (!currentUser) return;
                 if (get().isInitialized || isInitializing) return;
                 isInitializing = true;
+
+                // 1. Verify and refresh current user profile directly from DB to prevent stale admin sessions
+                try {
+                    const { data: dbUser, error: userError } = await supabase
+                        .from('app_users')
+                        .select('*')
+                        .eq('id', currentUser.id)
+                        .single();
+
+                    if (!userError && dbUser) {
+                        currentUser = {
+                            id: dbUser.id,
+                            name: dbUser.name,
+                            email: dbUser.email,
+                            role: dbUser.role as Role,
+                            allowedDepartments: dbUser.allowed_departments as Department[] | undefined
+                        };
+                        set({ currentUser });
+                    }
+                } catch (e) {
+                    console.error('Error verifying user session:', e);
+                }
 
                 const isViewer = currentUser?.role === 'Viewer';
                 const isAdmin = currentUser?.role === 'Admin';
