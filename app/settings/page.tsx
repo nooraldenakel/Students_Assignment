@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useStore, fetchAllRecords } from '../../lib/store';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
-import { Settings as SettingsIcon, ShieldAlert, Users, Plus, Trash2, X, AlertCircle, ChevronDown, ChevronUp, Database, Download, Upload, AlertTriangle, KeyRound, RotateCcw, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { Settings as SettingsIcon, ShieldAlert, Users, Plus, Trash2, X, AlertCircle, ChevronDown, ChevronUp, Database, Download, Upload, AlertTriangle, KeyRound, RotateCcw, FileSpreadsheet, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Role, Department, normalizeArabic } from '../../lib/store';
 
@@ -12,6 +12,8 @@ export default function SettingsPage() {
     const router = useRouter();
     const {
         currentUser,
+        stats,
+        clearAssignmentsByList,
         l1Enabled, l2Enabled, l3Enabled, l4Enabled,
         setL1Enabled, setL2Enabled, setL3Enabled, setL4Enabled,
         users, addUser, removeUser, updateUserRole, updateUserDepartments,
@@ -39,7 +41,17 @@ export default function SettingsPage() {
     // Database Admin State
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [adminPassword, setAdminPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [passwordAction, setPasswordAction] = useState<(() => Promise<void>) | null>(null);
+    const [passwordModalConfig, setPasswordModalConfig] = useState<{
+        title: string;
+        description: string;
+        confirmButtonText: string;
+    }>({
+        title: 'التحقق مطلوب',
+        description: 'يرجى إدخال كلمة مرور الحساب للتنفيذ',
+        confirmButtonText: 'تأكيد وتنفيذ'
+    });
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importAssignmentsFile, setImportAssignmentsFile] = useState<File | null>(null);
     const [targetCourse, setTargetCourse] = useState<'L1' | 'L2' | 'L3' | 'L4'>('L1');
@@ -49,7 +61,7 @@ export default function SettingsPage() {
     const assignmentsFileInputRef = React.useRef<HTMLInputElement>(null);
     const [isDatabaseOpen, setIsDatabaseOpen] = useState(false);
     const [hasData, setHasData] = useState<boolean | null>(null);
-    const [activeAction, setActiveAction] = useState<'export' | 'import' | 'delete' | 'restore_assignments' | null>(null);
+    const [activeAction, setActiveAction] = useState<'export' | 'import' | 'delete' | 'restore_assignments' | 'clear_assignments' | null>(null);
 
     const checkDataStatus = async () => {
         try {
@@ -72,6 +84,8 @@ export default function SettingsPage() {
         setMounted(true);
         if (!currentUser || currentUser.role !== 'Admin') {
             router.push('/');
+        } else {
+            useStore.getState().refreshStats();
         }
     }, [currentUser, router]);
 
@@ -130,11 +144,41 @@ export default function SettingsPage() {
         return matchesSearch && matchesRole;
     });
 
-    const triggerPasswordModal = (action: () => Promise<void>) => {
+    const triggerPasswordModal = (
+        action: () => Promise<void>,
+        options?: {
+            title?: string;
+            description?: string;
+            confirmButtonText?: string;
+        }
+    ) => {
         setPasswordAction(() => action);
+        setPasswordModalConfig({
+            title: options?.title || 'التحقق مطلوب',
+            description: options?.description || 'يرجى إدخال كلمة مرور الحساب للتنفيذ.',
+            confirmButtonText: options?.confirmButtonText || 'تأكيد وتنفيذ'
+        });
         setAdminPassword('');
+        setShowPassword(false);
         setModalError('');
         setShowPasswordModal(true);
+    };
+
+    const handleClearAssignments = (list: 'L1' | 'L2' | 'L3' | 'L4') => {
+        const count = stats?.byList?.[list] || 0;
+        const courseNum = list.replace('L', '');
+        triggerPasswordModal(
+            async () => {
+                setActiveAction('clear_assignments');
+                await clearAssignmentsByList(list);
+                showAlert('تم المسح بنجاح', `تم مسح جميع مباشرات Course ${courseNum} (${list}) بنجاح.`, 'success');
+            },
+            {
+                title: `تأكيد مسح مباشرات Course ${courseNum} (${list})`,
+                description: `⚠️ تنبيه هام: سيؤدي هذا الإجراء إلى مسح وإلغاء مباشرة (${count}) طالب في Course ${courseNum}. ستبقى بيانات الطلاب الأساسية في النظام ولكن ستتم إزالة علامة المباشرة وتاريخها لهذه الدورة.`,
+                confirmButtonText: `مسح مباشرات Course ${courseNum}`
+            }
+        );
     };
 
     const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -155,7 +199,7 @@ export default function SettingsPage() {
             });
 
             if (authError) {
-                setModalError('كلمة المرور غير صحيحة.');
+                setModalError('كلمة المرور غير صحيحة، يرجى التأكد وإعادة المحاولة.');
                 setIsDatabaseLoading(false);
                 return;
             }
@@ -174,41 +218,48 @@ export default function SettingsPage() {
     };
 
     const handleExportAll = () => {
-        triggerPasswordModal(async () => {
-            setActiveAction('export');
-            setIsDatabaseLoading(true);
-            try {
-                let allStudents: any[] = [];
-            let page = 0;
-            const PAGE_SIZE = 1000;
-            let hasMore = true;
+        triggerPasswordModal(
+            async () => {
+                setActiveAction('export');
+                setIsDatabaseLoading(true);
+                try {
+                    let allStudents: any[] = [];
+                    let page = 0;
+                    const PAGE_SIZE = 1000;
+                    let hasMore = true;
 
-            while (hasMore) {
-                const { data, error } = await supabase
-                    .from('students')
-                    .select('*')
-                    .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-                
-                if (error) throw error;
-                
-                if (data && data.length > 0) {
-                    allStudents = [...allStudents, ...data];
-                    page++;
-                } else {
-                    hasMore = false;
+                    while (hasMore) {
+                        const { data, error } = await supabase
+                            .from('students')
+                            .select('*')
+                            .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+                        
+                        if (error) throw error;
+                        
+                        if (data && data.length > 0) {
+                            allStudents = [...allStudents, ...data];
+                            page++;
+                        } else {
+                            hasMore = false;
+                        }
+                    }
+
+                    const wb = XLSX.utils.book_new();
+                    const wsStudents = XLSX.utils.json_to_sheet(allStudents);
+                    XLSX.utils.book_append_sheet(wb, wsStudents, "الطلاب (Students)");
+
+                    XLSX.writeFile(wb, `Students_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+                    showAlert('نجاح', `تم تصدير ${allStudents.length} طالب بنجاح.`, 'success');
+                } catch (error: any) {
+                    showAlert('خطأ في التصدير', error.message || 'فشل بناء ملف التصدير.', 'error');
                 }
+            },
+            {
+                title: 'تأكيد التصدير الشامل',
+                description: 'سيتم تحميل جميع بيانات الطلاب الحالية بصيغة ملف Excel (.xlsx).',
+                confirmButtonText: 'تأكيد وبدء التصدير'
             }
-
-            const wb = XLSX.utils.book_new();
-            const wsStudents = XLSX.utils.json_to_sheet(allStudents);
-            XLSX.utils.book_append_sheet(wb, wsStudents, "الطلاب (Students)");
-
-                XLSX.writeFile(wb, `Students_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
-                showAlert('نجاح', `تم تصدير ${allStudents.length} طالب بنجاح.`, 'success');
-            } catch (error: any) {
-                showAlert('خطأ في التصدير', error.message || 'فشل بناء ملف التصدير.', 'error');
-            }
-        });
+        );
     };
 
     const handleImportData = () => {
@@ -217,55 +268,62 @@ export default function SettingsPage() {
             return;
         }
 
-        triggerPasswordModal(async () => {
-            setActiveAction('import');
-            setIsDatabaseLoading(true);
-            try {
-                await new Promise<void>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        try {
-                            const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                            const workbook = XLSX.read(data, { type: 'array' });
-                            let importedCount = 0;
+        triggerPasswordModal(
+            async () => {
+                setActiveAction('import');
+                setIsDatabaseLoading(true);
+                try {
+                    await new Promise<void>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            try {
+                                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                                const workbook = XLSX.read(data, { type: 'array' });
+                                let importedCount = 0;
 
-                            const studentsSheetName = workbook.SheetNames.find(n => n.includes('Students') || n.includes('طلاب') || n === 'Sheet1');
-                            if (studentsSheetName) {
-                                const studentsData: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[studentsSheetName]);
-                                if (studentsData.length > 0) {
-                                    const BATCH_SIZE = 1000;
-                                    for (let i = 0; i < studentsData.length; i += BATCH_SIZE) {
-                                        const chunk = studentsData.slice(i, i + BATCH_SIZE).map((row: any) => {
-                                            const { id, ...rest } = row;
-                                            return rest;
-                                        });
-                                        const { error } = await supabase.from('students').insert(chunk);
-                                        if (error) throw new Error(`خطأ في رفع الطلاب: ${error.message}`);
+                                const studentsSheetName = workbook.SheetNames.find(n => n.includes('Students') || n.includes('طلاب') || n === 'Sheet1');
+                                if (studentsSheetName) {
+                                    const studentsData: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[studentsSheetName]);
+                                    if (studentsData.length > 0) {
+                                        const BATCH_SIZE = 1000;
+                                        for (let i = 0; i < studentsData.length; i += BATCH_SIZE) {
+                                            const chunk = studentsData.slice(i, i + BATCH_SIZE).map((row: any) => {
+                                                const { id, ...rest } = row;
+                                                return rest;
+                                            });
+                                            const { error } = await supabase.from('students').insert(chunk);
+                                            if (error) throw new Error(`خطأ في رفع الطلاب: ${error.message}`);
+                                        }
+                                        importedCount += studentsData.length;
+                                        setHasData(true);
                                     }
-                                    importedCount += studentsData.length;
-                                    setHasData(true);
                                 }
-                            }
 
-                            showAlert('نجاح', `تم استيراد ${importedCount} طالب بنجاح.`, 'success');
-                            setImportFile(null);
-                            if (fileInputRef.current) fileInputRef.current.value = '';
-                            resolve();
-                        } catch (err: any) {
-                            showAlert('خطأ أثناء الاستيراد', err.message || 'فشل استيراد البيانات.', 'error');
+                                showAlert('نجاح', `تم استيراد ${importedCount} طالب بنجاح.`, 'success');
+                                setImportFile(null);
+                                if (fileInputRef.current) fileInputRef.current.value = '';
+                                resolve();
+                            } catch (err: any) {
+                                showAlert('خطأ أثناء الاستيراد', err.message || 'فشل استيراد البيانات.', 'error');
+                                reject(err);
+                            }
+                        };
+                        reader.onerror = (err) => {
+                            showAlert('خطأ عام', 'فشل في قراءة الملف.', 'error');
                             reject(err);
-                        }
-                    };
-                    reader.onerror = (err) => {
-                        showAlert('خطأ عام', 'فشل في قراءة الملف.', 'error');
-                        reject(err);
-                    };
-                    reader.readAsArrayBuffer(importFile);
-                });
-            } catch (error: any) {
-                // errors already handled inside callback
+                        };
+                        reader.readAsArrayBuffer(importFile);
+                    });
+                } catch (error: any) {
+                    // errors already handled inside callback
+                }
+            },
+            {
+                title: 'تأكيد استيراد بيانات الطلاب',
+                description: `سيتم قراءة ملف (${importFile.name}) واستيراد سجلات الطلاب وإدراجها في قاعدة البيانات.`,
+                confirmButtonText: 'تأكيد واستيراد البيانات'
             }
-        });
+        );
     };
 
     const parseArabicDate = (str: any): string => {
@@ -296,158 +354,164 @@ export default function SettingsPage() {
             return;
         }
 
-        triggerPasswordModal(async () => {
-            setActiveAction('restore_assignments');
-            setIsDatabaseLoading(true);
-            try {
-                await new Promise<void>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        try {
-                            const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                            const workbook = XLSX.read(data, { type: 'array' });
-                            
-                            const sheetName = workbook.SheetNames.find(n => n.includes(targetCourse) || n.toLowerCase().includes('course') || n.includes('مباشر')) || workbook.SheetNames[0];
-                            const sheet = workbook.Sheets[sheetName];
-                            const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+        triggerPasswordModal(
+            async () => {
+                setActiveAction('restore_assignments');
+                setIsDatabaseLoading(true);
+                try {
+                    await new Promise<void>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = async (e) => {
+                            try {
+                                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                                const workbook = XLSX.read(data, { type: 'array' });
+                                
+                                const sheetName = workbook.SheetNames.find(n => n.includes(targetCourse) || n.toLowerCase().includes('course') || n.includes('مباشر')) || workbook.SheetNames[0];
+                                const sheet = workbook.Sheets[sheetName];
+                                const rows: any[] = XLSX.utils.sheet_to_json(sheet);
 
-                            if (!rows || rows.length === 0) {
-                                throw new Error('الملف فارغ أو لا يحتوي على صفوف بيانات.');
-                            }
-
-                            // 1. Fetch all students from database
-                            const stdRes = await fetchAllRecords('students');
-                            const allStudents: any[] = stdRes.data || [];
-                            if (allStudents.length === 0) {
-                                throw new Error('لا يوجد طلاب مسجلين في قاعدة البيانات للربط معهم.');
-                            }
-
-                            // 2. Fetch existing assignments for target course to avoid duplicates
-                            const asgnRes = await supabase.from('assignments').select('student_id').eq('list_id', targetCourse);
-                            const existingStudentIds = new Set<string>((asgnRes.data || []).map((a: any) => a.student_id));
-
-                            // 3. Build quick lookup maps for students
-                            const studentMapByDept = new Map<string, any>();
-                            const studentMapByName = new Map<string, any>();
-
-                            for (const s of allStudents) {
-                                const normName = normalizeArabic(s.name);
-                                const normDept = normalizeArabic(s.department || '');
-                                studentMapByDept.set(`${normName}___${normDept}`, s);
-                                if (!studentMapByName.has(normName)) {
-                                    studentMapByName.set(normName, s);
-                                }
-                            }
-
-                            // 4. Match and build insert list (skipping duplicates)
-                            const toInsert: any[] = [];
-                            let skippedDuplicates = 0;
-                            let notFoundStudents = 0;
-
-                            for (const row of rows) {
-                                const rawName = row['الاسم'] || row['اسم الطالب'] || row['name'] || row['Name'];
-                                if (!rawName) continue;
-                                const normName = normalizeArabic(String(rawName));
-                                const rawDept = row['القسم'] || row['department'] || '';
-                                const normDept = normalizeArabic(String(rawDept));
-
-                                let matchedStudent = studentMapByDept.get(`${normName}___${normDept}`);
-                                if (!matchedStudent) {
-                                    matchedStudent = studentMapByName.get(normName);
+                                if (!rows || rows.length === 0) {
+                                    throw new Error('الملف فارغ أو لا يحتوي على صفوف بيانات.');
                                 }
 
-                                if (!matchedStudent) {
-                                    notFoundStudents++;
-                                    continue;
+                                // 1. Fetch all students from database
+                                const stdRes = await fetchAllRecords('students');
+                                const allStudents: any[] = stdRes.data || [];
+                                if (allStudents.length === 0) {
+                                    throw new Error('لا يوجد طلاب مسجلين في قاعدة البيانات للربط معهم.');
                                 }
 
-                                // Skip duplicate assignment
-                                if (existingStudentIds.has(matchedStudent.id)) {
-                                    skippedDuplicates++;
-                                    continue;
+                                // 2. Fetch existing assignments for target course to avoid duplicates
+                                const asgnRes = await supabase.from('assignments').select('student_id').eq('list_id', targetCourse);
+                                const existingStudentIds = new Set<string>((asgnRes.data || []).map((a: any) => a.student_id));
+
+                                // 3. Build quick lookup maps for students
+                                const studentMapByDept = new Map<string, any>();
+                                const studentMapByName = new Map<string, any>();
+
+                                for (const s of allStudents) {
+                                    const normName = normalizeArabic(s.name);
+                                    const normDept = normalizeArabic(s.department || '');
+                                    studentMapByDept.set(`${normName}___${normDept}`, s);
+                                    if (!studentMapByName.has(normName)) {
+                                        studentMapByName.set(normName, s);
+                                    }
                                 }
 
-                                existingStudentIds.add(matchedStudent.id);
+                                // 4. Match and build insert list (skipping duplicates)
+                                const toInsert: any[] = [];
+                                let skippedDuplicates = 0;
+                                let notFoundStudents = 0;
 
-                                const assignedDate = parseArabicDate(row['تاريخ المباشرة'] || row['date'] || row['Date']);
-                                const assignedByName = row['مباشر بواسطة'] || row['assigned_by'] || currentUser?.name || 'Admin';
+                                for (const row of rows) {
+                                    const rawName = row['الاسم'] || row['اسم الطالب'] || row['name'] || row['Name'];
+                                    if (!rawName) continue;
+                                    const normName = normalizeArabic(String(rawName));
+                                    const rawDept = row['القسم'] || row['department'] || '';
+                                    const normDept = normalizeArabic(String(rawDept));
 
-                                toInsert.push({
-                                    student_id: matchedStudent.id,
-                                    list_id: targetCourse,
-                                    assigned_date: assignedDate,
-                                    assigned_by_user_id: currentUser?.id,
-                                    assigned_by_user_name: assignedByName
-                                });
+                                    let matchedStudent = studentMapByDept.get(`${normName}___${normDept}`);
+                                    if (!matchedStudent) {
+                                        matchedStudent = studentMapByName.get(normName);
+                                    }
+
+                                    if (!matchedStudent) {
+                                        notFoundStudents++;
+                                        continue;
+                                    }
+
+                                    // Skip duplicate assignment
+                                    if (existingStudentIds.has(matchedStudent.id)) {
+                                        skippedDuplicates++;
+                                        continue;
+                                    }
+
+                                    existingStudentIds.add(matchedStudent.id);
+
+                                    const assignedDate = parseArabicDate(row['تاريخ المباشرة'] || row['date'] || row['Date']);
+                                    const assignedByName = row['مباشر بواسطة'] || row['assigned_by'] || currentUser?.name || 'Admin';
+
+                                    toInsert.push({
+                                        student_id: matchedStudent.id,
+                                        list_id: targetCourse,
+                                        assigned_date: assignedDate,
+                                        assigned_by_user_id: currentUser?.id,
+                                        assigned_by_user_name: assignedByName
+                                    });
+                                }
+
+                                // 5. Batch insert in chunks of 500
+                                const BATCH_SIZE = 500;
+                                let insertedCount = 0;
+
+                                for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+                                    const chunk = toInsert.slice(i, i + BATCH_SIZE);
+                                    const { error: insErr } = await supabase.from('assignments').insert(chunk);
+                                    if (insErr) {
+                                        throw new Error(`خطأ أثناء إدراج المباشرات: ${insErr.message}`);
+                                    }
+                                    insertedCount += chunk.length;
+                                }
+
+                                // 6. Refresh state & UI
+                                useStore.getState().refreshStats();
+
+                                showAlert(
+                                    'تم استرجاع المباشرات بنجاح',
+                                    `تمت إضافة ${insertedCount} مباشرة بنجاح لـ (${targetCourse}).\nتم تخطي ${skippedDuplicates} مباشرة مكررة.\n${notFoundStudents > 0 ? `(لم يتم العثور على ${notFoundStudents} طالب في قائمة الطلاب الحالية)` : ''}`,
+                                    'success'
+                                );
+
+                                setImportAssignmentsFile(null);
+                                if (assignmentsFileInputRef.current) assignmentsFileInputRef.current.value = '';
+                                resolve();
+                            } catch (err: any) {
+                                showAlert('خطأ أثناء الاسترجاع', err.message || 'فشلت عملية استرجاع المباشرات.', 'error');
+                                reject(err);
                             }
-
-                            // 5. Batch insert in chunks of 500
-                            const BATCH_SIZE = 500;
-                            let insertedCount = 0;
-
-                            for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
-                                const chunk = toInsert.slice(i, i + BATCH_SIZE);
-                                const { error: insErr } = await supabase.from('assignments').insert(chunk);
-                                if (insErr) {
-                                    throw new Error(`خطأ أثناء إدراج المباشرات: ${insErr.message}`);
-                                }
-                                insertedCount += chunk.length;
-                            }
-
-                            // 6. Refresh state & UI
-                            useStore.getState().refreshStats();
-
-                            showAlert(
-                                'تم استرجاع المباشرات بنجاح',
-                                `تمت إضافة ${insertedCount} مباشرة بنجاح لـ (${targetCourse}).\nتم تخطي ${skippedDuplicates} مباشرة مكررة.\n${notFoundStudents > 0 ? `(لم يتم العثور على ${notFoundStudents} طالب في قائمة الطلاب الحالية)` : ''}`,
-                                'success'
-                            );
-
-                            setImportAssignmentsFile(null);
-                            if (assignmentsFileInputRef.current) assignmentsFileInputRef.current.value = '';
-                            resolve();
-                        } catch (err: any) {
-                            showAlert('خطأ أثناء الاسترجاع', err.message || 'فشلت عملية استرجاع المباشرات.', 'error');
+                        };
+                        reader.onerror = (err) => {
+                            showAlert('خطأ عام', 'فشل في قراءة ملف Excel.', 'error');
                             reject(err);
-                        }
-                    };
-                    reader.onerror = (err) => {
-                        showAlert('خطأ عام', 'فشل في قراءة ملف Excel.', 'error');
-                        reject(err);
-                    };
-                    reader.readAsArrayBuffer(importAssignmentsFile);
-                });
-            } catch (error: any) {
-                // Handled
+                        };
+                        reader.readAsArrayBuffer(importAssignmentsFile);
+                    });
+                } catch (error: any) {
+                    // Handled
+                }
+            },
+            {
+                title: `تأكيد استرجاع مباشرات ${targetCourse}`,
+                description: `سيتم فحص ملف (${importAssignmentsFile.name}) واسترجاع تواريخ ومسؤولي المباشرة لـ ${targetCourse} وتخطي أي مباشرة مكررة.`,
+                confirmButtonText: 'تأكيد واسترجاع المباشرات'
             }
-        });
+        );
     };
 
     const handleDeleteAllData = () => {
-        showAlert(
-            'حذف بيانات الطلاب',
-            'سيتم مسح جميع بيانات الطلاب بالكامل وبشكل لا يمكن استرجاعه. هل أنت متأكد تماماً؟',
-            'confirm',
-            () => {
-                // Secondary prompt via password
-                triggerPasswordModal(async () => {
-                    setActiveAction('delete');
-                    setIsDatabaseLoading(true);
-                    try {
-                        // Delete from assignments first due to FK constraints (if any)
-                        const { error: asgnError } = await supabase.from('assignments').delete().neq('student_id', '00000000-0000-0000-0000-000000000000');
-                        if (asgnError) throw asgnError;
+        triggerPasswordModal(
+            async () => {
+                setActiveAction('delete');
+                setIsDatabaseLoading(true);
+                try {
+                    // Delete from assignments first due to FK constraints (if any)
+                    const { error: asgnError } = await supabase.from('assignments').delete().neq('student_id', '00000000-0000-0000-0000-000000000000');
+                    if (asgnError) throw asgnError;
 
-                        // Delete all students
-                        const { error: stdError } = await supabase.from('students').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-                        if (stdError) throw stdError;
+                    // Delete all students
+                    const { error: stdError } = await supabase.from('students').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+                    if (stdError) throw stdError;
 
-                        setHasData(false);
-                        showAlert('تم بنجاح', 'تم حذف جميع بيانات النظام الأساسية.', 'success');
-                    } catch (error: any) {
-                        showAlert('خطأ', error.message || 'لم نتمكن من مسح بعض البيانات.', 'error');
-                    }
-                });
+                    setHasData(false);
+                    showAlert('تم بنجاح', 'تم حذف جميع بيانات النظام الأساسية.', 'success');
+                } catch (error: any) {
+                    showAlert('خطأ', error.message || 'لم نتمكن من مسح بعض البيانات.', 'error');
+                }
+            },
+            {
+                title: '⚠️ تحذير نهائي: حذف كافة بيانات الطلاب',
+                description: 'سيتم مسح كافة سجلات الطلاب والمباشرات بالكامل وبشكل لا يمكن التراجع عنه. يرجى إدخال كلمة مرور المشرف للتأكيد.',
+                confirmButtonText: 'حذف كافة البيانات نهائياً'
             }
         );
     };
@@ -783,15 +847,48 @@ export default function SettingsPage() {
                 <div className="space-y-8 flex-1 min-w-0">
                     {/* LEFT COLUMN: Assignment Controls */}
                     <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-[#1a2b4b]">
-                            <SettingsIcon className="w-5 h-5 text-indigo-500" />
-                            ضوابط المباشرة
-                        </h2>
-    
-                        <p className="text-[13px] text-gray-500 mb-6 leading-relaxed">
-                            تبديل توفر أزرار تعيين Course 1-4 عبر التطبيق. عند التعطيل، لن يتمكن المشغلون من تعيين الطلاب لهذه الدورات.
-                        </p>
-    
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-gray-100">
+                            <div>
+                                <h2 className="text-xl font-bold flex items-center gap-2 text-[#1a2b4b]">
+                                    <SettingsIcon className="w-5 h-5 text-indigo-500" />
+                                    ضوابط المباشرة
+                                </h2>
+                                <p className="text-[13px] text-gray-500 mt-1 leading-relaxed">
+                                    تبديل توفر أزرار تعيين Course 1-4 عبر التطبيق أو مسح مباشرات أي دورة.
+                                </p>
+                            </div>
+
+                            {/* ازالة المباشرة Block */}
+                            <div className="flex flex-col gap-1.5 items-end bg-rose-50/50 p-2.5 sm:p-3 rounded-2xl border border-rose-100 shrink-0 self-start sm:self-auto">
+                                <div className="flex items-center justify-between w-full gap-4 pb-1">
+                                    <span className="text-xs font-black text-rose-600 uppercase tracking-wider">ازالة المباشرة</span>
+                                    <span className="text-[11px] font-bold text-slate-400">Course 1-4</span>
+                                </div>
+                                <div className="flex gap-1.5 justify-end w-full">
+                                    {(['L1', 'L2', 'L3', 'L4'] as const).map(list => {
+                                        const count = stats?.byList?.[list] || 0;
+                                        const hasAssignments = count > 0;
+                                        return (
+                                            <button
+                                                key={`clear-${list}`}
+                                                disabled={!hasAssignments}
+                                                onClick={() => handleClearAssignments(list)}
+                                                title={hasAssignments ? `مسح كل طلاب Course ${list.replace('L', '')} (${count} طالب مباشر)` : `لا يوجد طلاب مباشرين في Course ${list.replace('L', '')}`}
+                                                className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center font-extrabold transition-all active:scale-95 border shadow-2xs
+                                                ${hasAssignments
+                                                        ? 'bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border-rose-200 hover:shadow-[0_4px_12px_-2px_rgba(225,29,72,0.5)] cursor-pointer'
+                                                        : 'bg-slate-50 text-slate-300 border-slate-200/60 cursor-not-allowed opacity-40 grayscale'}
+                                            `}
+                                            >
+                                                <span className="text-[10px] leading-none mb-0.5 uppercase font-black">{list}</span>
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="space-y-3">
                             {[
                                 { name: 'Course 1 (L1)', desc: 'السماح بتعيينات Course 1', enabled: l1Enabled, setEnabled: setL1Enabled },
@@ -1007,51 +1104,110 @@ export default function SettingsPage() {
 
             {/* Password Verification Modal */}
             {showPasswordModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-                        <div className="flex items-center gap-3 text-red-600 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-                                <KeyRound className="w-5 h-5" />
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+                    dir="rtl"
+                    role="dialog"
+                    aria-modal="true"
+                >
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-rose-100 flex flex-col relative overflow-hidden animate-in zoom-in-95 duration-200">
+                        {/* Red Accent Bar */}
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-500 via-red-600 to-rose-500" />
+
+                        {/* Modal Header */}
+                        <div className="flex items-start justify-between gap-3 mb-3 pt-1">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0 shadow-xs">
+                                    <ShieldAlert className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-extrabold text-slate-800 leading-snug">
+                                        {passwordModalConfig.title}
+                                    </h3>
+                                    <p className="text-[11px] text-rose-600 font-bold mt-0.5">
+                                        إجراء أمني محمي بكلمة المرور
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="text-lg font-bold">التحقق مطلوب</h3>
-                                <p className="text-xs text-slate-500">يرجى إدخال كلمة مرور الحساب للتنفيذ</p>
+
+                            <button
+                                type="button"
+                                onClick={() => setShowPasswordModal(false)}
+                                disabled={isDatabaseLoading}
+                                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors disabled:opacity-50"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Alert / Description Box */}
+                        <div className="p-3.5 mb-4 rounded-xl bg-amber-50/70 border border-amber-200/70 text-slate-700">
+                            <div className="flex items-start gap-2">
+                                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                <p className="text-xs font-medium leading-relaxed text-slate-700">
+                                    {passwordModalConfig.description}
+                                </p>
                             </div>
                         </div>
 
-                        <form onSubmit={handlePasswordSubmit}>
-                            <div className="mb-4">
-                                <input
-                                    type="password"
-                                    required
-                                    autoFocus
-                                    value={adminPassword}
-                                    onChange={(e) => setAdminPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 font-sans tracking-widest text-center outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:bg-white transition-all"
-                                />
+                        {/* Password Form */}
+                        <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-bold text-slate-700">
+                                    كلمة مرور المدير (Admin Password):
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                                        <KeyRound className="w-4 h-4" />
+                                    </div>
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        required
+                                        autoFocus
+                                        value={adminPassword}
+                                        onChange={(e) => setAdminPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        disabled={isDatabaseLoading}
+                                        className={`w-full pr-10 pl-10 py-2.5 rounded-xl border text-sm font-bold outline-none transition-all ${
+                                            modalError
+                                                ? 'border-rose-400 bg-rose-50/30 focus:ring-4 focus:ring-rose-500/10'
+                                                : 'border-slate-200 bg-slate-50 focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10'
+                                        }`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                                        tabIndex={-1}
+                                    >
+                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
                                 {modalError && (
-                                    <p className="text-red-500 text-[11px] font-bold mt-2 text-center">{modalError}</p>
+                                    <p className="text-rose-600 text-[11px] font-bold mt-1 text-center animate-in fade-in duration-150">
+                                        {modalError}
+                                    </p>
                                 )}
                             </div>
 
-                            <div className="flex gap-3">
+                            <div className="flex gap-2.5 pt-1">
                                 <button
                                     type="button"
                                     onClick={() => setShowPasswordModal(false)}
-                                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-500 font-bold text-sm hover:bg-gray-50 transition-colors"
+                                    disabled={isDatabaseLoading}
+                                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors"
                                 >
                                     إلغاء
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={isDatabaseLoading || !adminPassword}
-                                    className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold text-sm hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center"
+                                    className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
                                 >
                                     {isDatabaseLoading ? (
-                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                     ) : (
-                                        'تأكيد وتنفيذ'
+                                        passwordModalConfig.confirmButtonText
                                     )}
                                 </button>
                             </div>

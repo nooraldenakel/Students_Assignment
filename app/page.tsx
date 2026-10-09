@@ -10,7 +10,6 @@ import Pagination from '../components/Pagination';
 import Dropdown from '../components/Dropdown';
 import ScrollToTop from '../components/ScrollToTop';
 import ExportLoadingModal from '../components/ExportLoadingModal';
-import AdminPasswordModal from '../components/AdminPasswordModal';
 
 type SortField = 'name' | 'stage' | 'department' | 'studyType';
 type SortDirection = 'asc' | 'desc';
@@ -28,7 +27,7 @@ export default function MainPage() {
     const {
         currentUser, students, totalStudentsCount, stats,
         l1Enabled, l2Enabled, l3Enabled, l4Enabled,
-        toggleAssignment, updateStudent, addStudent, clearAssignmentsByList, clearAllAssignments,
+        toggleAssignment, updateStudent, addStudent,
         fetchStudentsPage, showAlert, isInitialized, isHydrated, departments, stages
     } = useStore();
     const [mounted, setMounted] = useState(false);
@@ -60,21 +59,6 @@ export default function MainPage() {
     const [pageSize, setPageSize] = useState<number>(10);
     const [isPageLoading, setIsPageLoading] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
-
-    // Password modal state for dangerous assignment removal
-    const [passwordModalConfig, setPasswordModalConfig] = useState<{
-        isOpen: boolean;
-        title: string;
-        description: string;
-        confirmButtonText: string;
-        onConfirm: () => Promise<void> | void;
-    }>({
-        isOpen: false,
-        title: '',
-        description: '',
-        confirmButtonText: '',
-        onConfirm: () => {}
-    });
 
     // FAB visibility on scroll
     const [fabVisible, setFabVisible] = useState(true);
@@ -480,50 +464,12 @@ export default function MainPage() {
                                     </div>
                                 </th>
 
-                                <th className="sticky top-[86px] sm:top-[88px] z-20 bg-slate-100 p-3.5 md:p-4 border-b-2 border-slate-200 text-right w-[240px]">
-                                    <div className="flex flex-col gap-1.5 items-end">
-                                        {isAdmin && (
-                                            <div className="flex items-center justify-between w-full pb-1">
-                                                <span className="text-xs font-black text-rose-600 uppercase tracking-wider">ازالة المباشرة</span>
-                                                <span className="text-[11px] font-bold text-slate-400">Course 1-4</span>
-                                            </div>
-                                        )}
-                                        {isAdmin && (
-                                            <div className="flex gap-1.5 justify-end w-full">
-                                                {(['L1', 'L2', 'L3', 'L4'] as const).map(list => {
-                                                    const hasAssignments = (stats?.byList?.[list] || 0) > 0;
-                                                    return (
-                                                        <button
-                                                            key={`clear-${list}`}
-                                                            disabled={!hasAssignments}
-                                                            onClick={() => {
-                                                                setPasswordModalConfig({
-                                                                    isOpen: true,
-                                                                    title: `مسح كل مباشرات ${list} (Course ${list.replace('L', '')})`,
-                                                                    description: `سيؤدي هذا الإجراء إلى مسح جميع مباشرات الطلاب في Course ${list.replace('L', '')}. يرجى إدخال كلمة مرور المشرف للمتابعة.`,
-                                                                    confirmButtonText: `مسح Course ${list.replace('L', '')}`,
-                                                                    onConfirm: async () => {
-                                                                        await clearAssignmentsByList(list);
-                                                                    }
-                                                                });
-                                                            }}
-                                                            title={`مسح كل طلاب Course ${list.replace('L', '')}`}
-                                                            className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center font-extrabold transition-all active:scale-95 border shadow-2xs
-                                                            ${hasAssignments
-                                                                    ? 'bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border-rose-200 hover:shadow-[0_4px_12px_-2px_rgba(225,29,72,0.5)] cursor-pointer'
-                                                                    : 'bg-slate-50 text-slate-300 border-slate-200/60 cursor-not-allowed opacity-40 grayscale'}
-                                                        `}
-                                                        >
-                                                            <span className="text-[10px] leading-none mb-0.5 uppercase font-black">{list}</span>
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                        {!isAdmin && (
-                                            <span className="text-sm font-extrabold text-slate-700">المباشرات</span>
-                                        )}
+                                <th className="sticky top-[86px] sm:top-[88px] z-20 bg-slate-100 p-3.5 md:p-4 border-b-2 border-slate-200 text-center w-[240px]">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                                            <UserCheck className="w-4 h-4" />
+                                        </div>
+                                        <span className="text-sm md:text-[15px] font-extrabold text-slate-800">المباشرات (Course 1-4)</span>
                                     </div>
                                 </th>
                                 {canEdit && <th className="sticky top-[86px] sm:top-[88px] z-20 bg-slate-100 p-3.5 md:p-4 border-b-2 border-slate-200 w-16 text-center text-xs font-bold text-slate-400">إجراءات</th>}
@@ -891,19 +837,6 @@ export default function MainPage() {
                 title="جاري تصدير الطلاب غير المباشرين إلى Excel..."
                 status="يرجى الانتظار، جاري تجميع وتنسيق بيانات الطلاب غير المباشرين وحفظ الملف..."
             />
-
-            {/* Admin Password Modal for Assignment Clearing */}
-            {currentUser && (
-                <AdminPasswordModal
-                    isOpen={passwordModalConfig.isOpen}
-                    title={passwordModalConfig.title}
-                    description={passwordModalConfig.description}
-                    confirmButtonText={passwordModalConfig.confirmButtonText}
-                    currentUserEmail={currentUser.email}
-                    onClose={() => setPasswordModalConfig(prev => ({ ...prev, isOpen: false }))}
-                    onConfirm={passwordModalConfig.onConfirm}
-                />
-            )}
 
             <style jsx global>{`
                 @keyframes modalIn {
